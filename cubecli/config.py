@@ -51,4 +51,4 @@ def save_config(config: Dict[str, str]) -> None:
 
 def get_api_url() -> str:
     """Get the API base URL"""
-    return os.getenv("CUBE_API_URL", "https://api-cloud.cubepath.com")
+    return os.getenv("CUBE_API_URL", "https://api.cubepath.com")
