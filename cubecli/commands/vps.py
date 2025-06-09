@@ -132,9 +132,18 @@ def list_vps(ctx: typer.Context):
         for vps in vps_list:
             vps["project_name"] = project.get("name", "N/A")
             vps["project_id"] = project.get("id", "N/A")
-            # Extract main IP from floating_ip
-            floating_ip = vps.get("floating_ip", {})
-            vps["main_ip"] = floating_ip.get("address", "N/A")
+            # Extract main IP from floating_ips array
+            floating_ips = vps.get("floating_ips", [])
+            if floating_ips and len(floating_ips) > 0:
+                # Get the first IPv4 address
+                ipv4_ips = [ip for ip in floating_ips if ip.get("type") == "IPv4"]
+                if ipv4_ips:
+                    vps["main_ip"] = ipv4_ips[0].get("address", "N/A")
+                else:
+                    # If no IPv4, get the first IP
+                    vps["main_ip"] = floating_ips[0].get("address", "N/A")
+            else:
+                vps["main_ip"] = "N/A"
             # Extract plan name
             plan = vps.get("plan", {})
             vps["plan_name"] = plan.get("plan_name", "N/A")
@@ -202,8 +211,17 @@ def show(
             if vps.get("id") == vps_id:
                 vps["project_name"] = project.get("name", "N/A")
                 # Extract additional info
-                floating_ip = vps.get("floating_ip", {})
-                vps["main_ip"] = floating_ip.get("address", "N/A")
+                floating_ips = vps.get("floating_ips", [])
+                if floating_ips and len(floating_ips) > 0:
+                    # Get the first IPv4 address
+                    ipv4_ips = [ip for ip in floating_ips if ip.get("type") == "IPv4"]
+                    if ipv4_ips:
+                        vps["main_ip"] = ipv4_ips[0].get("address", "N/A")
+                    else:
+                        # If no IPv4, get the first IP
+                        vps["main_ip"] = floating_ips[0].get("address", "N/A")
+                else:
+                    vps["main_ip"] = "N/A"
                 plan = vps.get("plan", {})
                 vps["plan_name"] = plan.get("plan_name", "N/A")
                 template = vps.get("template", {})
@@ -258,16 +276,32 @@ def show(
         # Network info table
         console.print()
         net_table = Table(title="Network Information", box=box.ROUNDED, show_lines=True, title_style="bold green")
-        net_table.add_column("Type", style="bold")
-        net_table.add_column("Address")
+        net_table.add_column("Type", style="bold cyan")
+        net_table.add_column("Details", style="white")
         
-        net_table.add_row("IPv4", vps_found.get('main_ip', 'N/A'))
-        net_table.add_row("IPv6", vps_found.get('ipv6', 'N/A'))
+        # Add floating IPs
+        floating_ips = vps_found.get('floating_ips', [])
+        for ip in floating_ips:
+            ip_type = ip.get('type', 'Unknown')
+            address = ip.get('address', 'N/A')
+            if ip_type == 'IPv4':
+                net_table.add_row("Public IPv4", f"[bold green]{address}[/bold green]")
+            elif ip_type == 'IPv6':
+                net_table.add_row("Public IPv6", f"[green]{address}[/green]")
+            else:
+                net_table.add_row(f"Public {ip_type}", address)
+        
+        # Add IPv6 if available (legacy support)
+        ipv6 = vps_found.get('ipv6')
+        if ipv6 and not any(ip.get('type') == 'IPv6' for ip in floating_ips):
+            net_table.add_row("Public IPv6", f"[green]{ipv6}[/green]")
         
         # Add network info if available
         network = vps_found.get('network')
         if network:
-            net_table.add_row("Private Network", f"{network.get('name', 'N/A')} ({network.get('assigned_ip', 'N/A')})")
+            network_name = network.get('name', 'N/A')
+            assigned_ip = network.get('assigned_ip', 'N/A')
+            net_table.add_row("Private Network", f"[yellow]{network_name}[/yellow] → [dim]{assigned_ip}[/dim]")
         
         console.print(net_table)
         

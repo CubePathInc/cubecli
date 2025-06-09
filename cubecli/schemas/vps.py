@@ -1,6 +1,11 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
+
+class FloatingIP(BaseModel):
+    address: str
+    netmask: str
+    type: str
 
 class VPS(BaseModel):
     id: int
@@ -9,6 +14,7 @@ class VPS(BaseModel):
     status: str
     main_ip: Optional[str] = None
     ipv6: Optional[str] = None
+    floating_ips: Optional[List[FloatingIP]] = None
     plan_name: str
     template_name: str
     location_name: str
