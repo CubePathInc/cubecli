@@ -74,25 +74,24 @@ def list_projects(ctx: typer.Context):
             print_error("No projects found")
             return
         
-        table = create_table("Projects", ["ID", "Name", "Description", "VPS Count", "Networks", "Created"])
-        
+        table = create_table("Projects", ["ID", "Name", "Description", "VPS Count", "Networks"])
+
         for item in projects:
             # Extract project info from the structure
             project = item.get("project", {})
             vps_count = len(item.get("vps", []))
             networks_count = len(item.get("networks", []))
-            
+
             description = project.get("description", "N/A")
             if description and len(description) > 30:
                 description = description[:30] + "..."
-            
+
             table.add_row(
                 str(project.get("id", "N/A")),
                 project.get("name", "N/A"),
                 description,
                 str(vps_count),
-                str(networks_count),
-                project.get("created_at", "N/A")
+                str(networks_count)
             )
         
         console.print()

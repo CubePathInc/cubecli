@@ -89,15 +89,14 @@ def list_keys(ctx: typer.Context):
             print_error("No SSH keys found")
             return
         
-        table = create_table("SSH Keys", ["ID", "Name", "Key (truncated)", "Created"])
-        
+        table = create_table("SSH Keys", ["ID", "Name", "Key (truncated)"])
+
         for key in ssh_keys:
             key_preview = key["ssh_key"][:50] + "..." if len(key["ssh_key"]) > 50 else key["ssh_key"]
             table.add_row(
                 str(key["id"]),
                 key["name"],
-                key_preview,
-                key.get("created_at", "N/A")
+                key_preview
             )
         
         console.print()
