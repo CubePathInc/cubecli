@@ -38,14 +38,26 @@ def list_floating_ips(ctx: typer.Context):
         project = item.get("project", {})
         vps_list = item.get("vps", [])
         for vps in vps_list:
-            floating_ip = vps.get("floating_ip", {})
-            if floating_ip and floating_ip.get("address"):
-                # Add VPS and project info to the floating IP
-                floating_ip["vps_id"] = vps.get("id")
-                floating_ip["vps_name"] = vps.get("name")
-                floating_ip["project_name"] = project.get("name")
-                floating_ip["location"] = vps.get("location", {}).get("description", "N/A")
-                all_floating_ips.append(floating_ip)
+            # Get floating_ips data (can be dict with 'list' or direct list)
+            floating_ips_data = vps.get("floating_ips", {})
+
+            # Extract the list of IPs
+            if isinstance(floating_ips_data, dict):
+                floating_ips = floating_ips_data.get("list", [])
+            else:
+                floating_ips = floating_ips_data if isinstance(floating_ips_data, list) else []
+
+            # Process each floating IP
+            for floating_ip in floating_ips:
+                if floating_ip and floating_ip.get("address"):
+                    # Create a copy to avoid modifying the original
+                    ip_info = floating_ip.copy()
+                    # Add VPS and project info
+                    ip_info["vps_id"] = vps.get("id")
+                    ip_info["vps_name"] = vps.get("name")
+                    ip_info["project_name"] = project.get("name")
+                    ip_info["location"] = vps.get("location", {}).get("description", "N/A")
+                    all_floating_ips.append(ip_info)
     
     if json_output:
         print_json(all_floating_ips)

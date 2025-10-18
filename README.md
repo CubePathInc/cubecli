@@ -9,7 +9,12 @@ Official command-line interface for CubePath Cloud API.
 ```bash
 # Install in isolated environment with pipx
 pipx install git+https://github.com/CubePathInc/cubecli.git
+
+# Ensure pipx binaries are in your PATH
+pipx ensurepath
 ```
+
+**Note:** After installation, you may need to restart your terminal or run `source ~/.zshrc` (or `~/.bashrc`) for the `cubecli` command to be available.
 
 ### Method 2: Install from source
 
@@ -17,6 +22,9 @@ pipx install git+https://github.com/CubePathInc/cubecli.git
 git clone https://github.com/CubePathInc/cubecli.git
 cd cubecli
 pipx install .
+
+# Ensure pipx binaries are in your PATH
+pipx ensurepath
 ```
 
 

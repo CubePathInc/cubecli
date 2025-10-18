@@ -133,7 +133,13 @@ def list_vps(ctx: typer.Context):
             vps["project_name"] = project.get("name", "N/A")
             vps["project_id"] = project.get("id", "N/A")
             # Extract main IP from floating_ips array
-            floating_ips = vps.get("floating_ips", [])
+            floating_ips_data = vps.get("floating_ips", {})
+            # Check if floating_ips is a dict with 'list' key or a direct list
+            if isinstance(floating_ips_data, dict):
+                floating_ips = floating_ips_data.get("list", [])
+            else:
+                floating_ips = floating_ips_data if isinstance(floating_ips_data, list) else []
+
             if floating_ips and len(floating_ips) > 0:
                 # Get the first IPv4 address
                 ipv4_ips = [ip for ip in floating_ips if ip.get("type") == "IPv4"]
@@ -147,6 +153,9 @@ def list_vps(ctx: typer.Context):
             # Extract plan name
             plan = vps.get("plan", {})
             vps["plan_name"] = plan.get("plan_name", "N/A")
+            # Extract template name
+            template = vps.get("template", {})
+            vps["template_name"] = template.get("template_name", "N/A")
             # Extract location (this might need adjustment based on actual data structure)
             location = vps.get("location", {})
             vps["location_name"] = location.get("description", "N/A")
@@ -159,8 +168,8 @@ def list_vps(ctx: typer.Context):
             print_error("No VPS instances found")
             return
         
-        table = create_table("VPS Instances", ["ID", "Name", "Project", "Status", "IP", "Plan", "Location"])
-        
+        table = create_table("VPS Instances", ["ID", "Name", "Project", "Status", "IP", "Plan", "Template", "Location"])
+
         for vps in all_vps:
             table.add_row(
                 str(vps["id"]),
@@ -169,6 +178,7 @@ def list_vps(ctx: typer.Context):
                 format_status(vps.get("status", "unknown")),
                 vps.get("main_ip", "N/A"),
                 vps.get("plan_name", "N/A"),
+                vps.get("template_name", "N/A"),
                 vps.get("location_name", "N/A")
             )
         
@@ -602,9 +612,12 @@ def plan_list(ctx: typer.Context):
                     table = create_table("", ["Plan", "vCPUs", "RAM", "Storage", "Bandwidth", "Price/Hour", "Price/Month"])
                     
                     for plan in plans:
+                        # Convert price to float if it's a string
                         hourly_price = plan.get('price_per_hour', 0)
+                        if isinstance(hourly_price, str):
+                            hourly_price = float(hourly_price)
                         monthly_price = hourly_price * 24 * 30  # 30 days * 24 hours
-                        
+
                         table.add_row(
                             plan.get("plan_name", "N/A"),
                             str(plan.get("cpu", "N/A")),
@@ -649,18 +662,17 @@ def template_list(ctx: typer.Context):
             return
         
         console.print()
-        table = create_table("Available VPS Templates", ["Name", "Version", "Architecture"])
-        
+        table = create_table("Available VPS Templates", ["Template Name", "OS", "Version"])
+
         # Sort templates by name
         sorted_templates = sorted(templates, key=lambda x: x.get("template_name", ""))
-        
+
         for template in sorted_templates:
             table.add_row(
                 template.get("template_name", "N/A"),
-                template.get("version", "N/A"),
-                template.get("architecture", "x86_64")
+                template.get("os_name", "N/A"),
+                template.get("version", "N/A")
             )
-        
+
         console.print(table)
         console.print()
-        console.print("[dim]Use template name when creating a VPS with --template option[/dim]")
