@@ -99,7 +99,7 @@ cubecli network delete <network-id>
 
 ```bash
 # Create VPS
-cubecli vps create --name demoserver --plan cx11 --template "Debian 12" --ssh demo --project <project-id>
+cubecli vps create --name demoserver --plan rz.pro --template debian-12 --ssh demo --project <project-id>
 
 # List VPS
 cubecli vps list
@@ -119,7 +119,7 @@ cubecli vps resize <vps-id> --plan rz.nano
 cubecli vps change-password <vps-id> --new-password test123
 
 # Reinstall VPS
-cubecli vps reinstall <vps-id> --template "Debian 12"
+cubecli vps reinstall <vps-id> --template debian-12
 ```
 
 ### Locations
