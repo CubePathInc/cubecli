@@ -14,67 +14,84 @@ def list_floating_ips(ctx: typer.Context):
     """List all floating IPs"""
     api_token = get_context_value(ctx, "api_token")
     json_output = get_context_value(ctx, "json", False)
-    
+
     if not api_token:
         print_error("No API token configured")
         raise typer.Exit(1)
-    
+
     client = APIClient(api_token)
-    
+
     with with_spinner("Fetching floating IPs...") as progress:
         task = progress.add_task("Fetching floating IPs...", total=None)
         try:
-            # Floating IPs are part of VPS data in projects
-            response = client.get("/projects/")
+            # Use the dedicated floating IPs endpoint for more details
+            response = client.get("/floating_ips/organization")
             progress.update(task, completed=True)
         except Exception as e:
             handle_api_exception(e, progress)
-    
-    # Extract floating IPs from VPS data
-    project_list = response if isinstance(response, list) else response.get("projects", [])
-    
+
+    # Extract single IPs and subnet IPs
+    single_ips = response.get("single_ips", [])
+    subnets = response.get("subnets", [])
+
+    # Combine all IPs into one list with type indicator
     all_floating_ips = []
-    for item in project_list:
-        project = item.get("project", {})
-        vps_list = item.get("vps", [])
-        for vps in vps_list:
-            # Get floating_ips data (can be dict with 'list' or direct list)
-            floating_ips_data = vps.get("floating_ips", {})
 
-            # Extract the list of IPs
-            if isinstance(floating_ips_data, dict):
-                floating_ips = floating_ips_data.get("list", [])
-            else:
-                floating_ips = floating_ips_data if isinstance(floating_ips_data, list) else []
+    # Add single IPs
+    for ip in single_ips:
+        ip_info = ip.copy()
+        ip_info["ip_type"] = "Single"
+        all_floating_ips.append(ip_info)
 
-            # Process each floating IP
-            for floating_ip in floating_ips:
-                if floating_ip and floating_ip.get("address"):
-                    # Create a copy to avoid modifying the original
-                    ip_info = floating_ip.copy()
-                    # Add VPS and project info
-                    ip_info["vps_id"] = vps.get("id")
-                    ip_info["vps_name"] = vps.get("name")
-                    ip_info["project_name"] = project.get("name")
-                    ip_info["location"] = vps.get("location", {}).get("description", "N/A")
-                    all_floating_ips.append(ip_info)
-    
+    # Add subnet IPs (expand them)
+    for subnet in subnets:
+        subnet_ips = subnet.get("ip_addresses", [])
+        for ip in subnet_ips:
+            ip_info = ip.copy()
+            ip_info["ip_type"] = f"Subnet /{subnet.get('prefix', 'N/A')}"
+            ip_info["protection_type"] = subnet.get("protection_type", "N/A")
+            all_floating_ips.append(ip_info)
+
     if json_output:
         print_json(all_floating_ips)
     else:
         if not all_floating_ips:
             print_error("No floating IPs found")
             return
-        
+
         console.print()
-        table = create_table("Floating IPs", ["IP Address", "VPS", "Project", "Location"])
-        
+        table = create_table(
+            "Floating IPs",
+            ["IP Address", "Type", "Status", "Server Type", "Assigned To", "DDoS Protection", "Location"]
+        )
+
         for ip in all_floating_ips:
+            # Format protection type
+            protection = ip.get("protection_type", "N/A")
+            if protection and protection != "N/A":
+                protection = protection.replace("AntiDDos_", "").replace("_", " ")
+
+            # Get assigned server (VPS or Baremetal)
+            assigned_to = "-"
+            server_type = "-"
+            vps_name = ip.get("vps_name")
+            baremetal_name = ip.get("baremetal_name")
+
+            if vps_name:
+                assigned_to = vps_name
+                server_type = "VPS"
+            elif baremetal_name:
+                assigned_to = baremetal_name
+                server_type = "Baremetal"
+
             table.add_row(
                 ip.get("address", "N/A"),
-                ip.get("vps_name", "N/A"),
-                ip.get("project_name", "N/A"),
-                ip.get("location", "N/A")
+                ip.get("ip_type", "N/A"),
+                ip.get("status", "N/A"),
+                server_type,
+                assigned_to,
+                protection,
+                ip.get("location_name", "N/A")
             )
-        
+
         console.print(table)

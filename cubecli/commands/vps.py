@@ -153,12 +153,12 @@ def list_vps(ctx: typer.Context):
             # Extract plan name
             plan = vps.get("plan", {})
             vps["plan_name"] = plan.get("plan_name", "N/A")
-            # Extract template name
+            # Extract OS name (use os_name instead of template_name for consistency with baremetal)
             template = vps.get("template", {})
-            vps["template_name"] = template.get("template_name", "N/A")
+            vps["os_name"] = template.get("os_name", "N/A")
             # Extract location (this might need adjustment based on actual data structure)
             location = vps.get("location", {})
-            vps["location_name"] = location.get("description", "N/A")
+            vps["location_name"] = location.get("location_name", "N/A")
             all_vps.append(vps)
     
     if json_output:
@@ -168,7 +168,7 @@ def list_vps(ctx: typer.Context):
             print_error("No VPS instances found")
             return
         
-        table = create_table("VPS Instances", ["ID", "Name", "Project", "Status", "IP", "Plan", "Template", "Location"])
+        table = create_table("VPS Instances", ["ID", "Name", "Project", "Status", "IP", "Plan", "OS", "Location"])
 
         for vps in all_vps:
             table.add_row(
@@ -178,7 +178,7 @@ def list_vps(ctx: typer.Context):
                 format_status(vps.get("status", "unknown")),
                 vps.get("main_ip", "N/A"),
                 vps.get("plan_name", "N/A"),
-                vps.get("template_name", "N/A"),
+                vps.get("os_name", "N/A"),
                 vps.get("location_name", "N/A")
             )
         
@@ -235,9 +235,9 @@ def show(
                 plan = vps.get("plan", {})
                 vps["plan_name"] = plan.get("plan_name", "N/A")
                 template = vps.get("template", {})
-                vps["template_name"] = template.get("template_name", "N/A")
+                vps["os_name"] = template.get("os_name", "N/A")
                 location = vps.get("location", {})
-                vps["location_name"] = location.get("description", "N/A")
+                vps["location_name"] = location.get("location_name", "N/A")
                 vps_found = vps
                 break
         if vps_found:
@@ -321,7 +321,7 @@ def show(
         access_table.add_column("Property", style="bold")
         access_table.add_column("Value")
         
-        access_table.add_row("Template", vps_found.get('template_name', 'N/A'))
+        access_table.add_row("OS", vps_found.get('os_name', 'N/A'))
         access_table.add_row("Username", vps_found.get('user', 'root'))
         
         # Check if SSH key is attached
