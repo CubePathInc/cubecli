@@ -35,8 +35,8 @@ def setup():
         # Test with a simple endpoint that supports token auth
         client.get("/sshkey/user/sshkeys")
         print_success("API token is valid!")
-    except Exception:
-        print_error("Invalid API token or connection failed")
+    except Exception as e:
+        print_error(str(e))
         raise typer.Exit(1)
     
     # Save configuration

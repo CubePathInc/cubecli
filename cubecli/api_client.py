@@ -18,9 +18,16 @@ class APIClient:
         try:
             response.raise_for_status()
             return response.json()
-        except (httpx.HTTPStatusError, httpx.RequestError):
-            # Let the command handlers deal with error formatting
-            raise
+        except httpx.HTTPStatusError as e:
+            # Try to extract detail from API response
+            try:
+                error_data = response.json()
+                detail = error_data.get("detail", str(e))
+            except Exception:
+                detail = str(e)
+            raise Exception(detail)
+        except httpx.RequestError as e:
+            raise Exception(f"Connection error: {e}")
     
     def get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """GET request"""

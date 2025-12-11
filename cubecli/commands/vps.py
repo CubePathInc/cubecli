@@ -36,15 +36,19 @@ def create(
     ssh_key: Optional[str] = typer.Option(None, "--ssh", "-s", help="SSH key name"),
     network_id: Optional[int] = typer.Option(None, "--network", help="Network ID"),
     label: Optional[str] = typer.Option(None, "--label", help="VPS label"),
-    password: Optional[str] = typer.Option(None, "--password", help="Root password (auto-generated if not provided)"),
+    password: Optional[str] = typer.Option(None, "--password", help="Root password"),
 ):
     """Create a new VPS"""
     api_token = get_context_value(ctx, "api_token")
     json_output = get_context_value(ctx, "json", False)
-    
+
     if not api_token:
         print_error("No API token configured")
         raise typer.Exit(1)
+
+    # Require either SSH key or password
+    if not ssh_key and not password:
+        raise typer.BadParameter("You must provide either --ssh (SSH key) or --password")
     
     client = APIClient(api_token)
     
