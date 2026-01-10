@@ -8,6 +8,7 @@ from cubecli.utils import (
 )
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
 from rich.table import Table
+from rich.columns import Columns
 from rich import box
 import httpx
 
@@ -284,29 +285,22 @@ def show(
         info_table.add_row("Status", format_status(vps_found.get('status', 'unknown')))
         info_table.add_row("Project", vps_found.get('project_name', 'N/A'))
         info_table.add_row("Location", vps_found.get('location_name', 'N/A'))
-        info_table.add_row("Created", vps_found.get('created_at', 'N/A'))
-        
-        console.print(info_table)
-        
+
         # Plan details table
         plan = vps_found.get('plan', {})
+        plan_table = Table(title="Plan Details", box=box.ROUNDED, show_lines=True, title_style="bold green")
+        plan_table.add_column("Resource", style="bold")
+        plan_table.add_column("Value")
+
         if plan:
-            console.print()
-            plan_table = Table(title="Plan Details", box=box.ROUNDED, show_lines=True, title_style="bold green")
-            plan_table.add_column("Resource", style="bold")
-            plan_table.add_column("Value")
-            
             plan_table.add_row("Plan", plan.get('plan_name', 'N/A'))
             plan_table.add_row("vCPUs", str(plan.get('cpu', 'N/A')))
             plan_table.add_row("RAM", f"{plan.get('ram', 0)} MB")
             plan_table.add_row("Storage", f"{plan.get('storage', 0)} GB")
             plan_table.add_row("Bandwidth", f"{plan.get('bandwidth', 0)} GB")
             plan_table.add_row("Price/Hour", f"${plan.get('price_per_hour', 0)}")
-            
-            console.print(plan_table)
-        
+
         # Network info table
-        console.print()
         net_table = Table(title="Network Information", box=box.ROUNDED, show_lines=True, title_style="bold green")
         net_table.add_column("Type", style="bold cyan")
         net_table.add_column("Details", style="white")
@@ -339,11 +333,8 @@ def show(
             network_name = network.get('name', 'N/A')
             assigned_ip = network.get('assigned_ip', 'N/A')
             net_table.add_row("Private Network", f"[yellow]{network_name}[/yellow] → [dim]{assigned_ip}[/dim]")
-        
-        console.print(net_table)
-        
+
         # Access info table
-        console.print()
         access_table = Table(title="Access Information", box=box.ROUNDED, show_lines=True, title_style="bold green")
         access_table.add_column("Property", style="bold")
         access_table.add_column("Value")
@@ -357,7 +348,10 @@ def show(
             ssh_key_names = [key.get('name', 'N/A') for key in ssh_keys]
             access_table.add_row("SSH Keys", ", ".join(ssh_key_names))
 
-        console.print(access_table)
+        # Print tables in two columns with equal width
+        console.print(Columns([info_table, plan_table], equal=True, expand=True))
+        console.print()
+        console.print(Columns([net_table, access_table], equal=True, expand=True))
 
 @app.command()
 def destroy(
