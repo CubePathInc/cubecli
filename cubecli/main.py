@@ -2,7 +2,8 @@ import typer
 from typing import Optional
 from rich.console import Console
 
-from cubecli.commands import config, ssh_key, project, network, vps, location, floating_ip, baremetal, ddos_attack, update
+from cubecli.commands import config, ssh_key, project, network, vps, location, floating_ip, baremetal, ddos_attack
+from cubecli.commands.update import update_cubecli
 from cubecli.config import load_config, ConfigError
 from cubecli.utils import print_error
 
@@ -27,7 +28,7 @@ app.add_typer(baremetal.app, name="baremetal", help="Manage baremetal servers")
 app.add_typer(location.app, name="location", help="List available locations")
 app.add_typer(floating_ip.app, name="floating-ip", help="Manage floating IPs")
 app.add_typer(ddos_attack.app, name="ddos-attack", help="View DDoS attack history")
-app.add_typer(update.app, name="update", help="Update cubecli to the latest version")
+app.command(name="update", help="Update cubecli to the latest version")(update_cubecli)
 
 # Global options
 verbose_option = typer.Option(False, "--verbose", "-v", help="Enable verbose output")

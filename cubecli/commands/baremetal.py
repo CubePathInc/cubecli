@@ -111,7 +111,7 @@ def deploy(
 def list_baremetal(
     ctx: typer.Context,
     project_id: Optional[int] = typer.Option(None, "--project", "-p", help="Filter by project ID"),
-    location: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
+    location_filter: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
 ):
     """List all baremetal servers"""
     api_token = get_context_value(ctx, "api_token")
@@ -170,8 +170,8 @@ def list_baremetal(
     if project_id is not None:
         all_baremetal = [server for server in all_baremetal if server.get("project_id") == project_id]
 
-    if location is not None:
-        all_baremetal = [server for server in all_baremetal if server.get("location_name") == location]
+    if location_filter is not None:
+        all_baremetal = [server for server in all_baremetal if server.get("location_name") == location_filter]
 
     if json_output:
         print_json(all_baremetal)

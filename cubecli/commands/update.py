@@ -1,49 +1,20 @@
 import typer
 import subprocess
-import sys
-from pathlib import Path
-from cubecli.utils import print_success, print_error, print_info, console
+from cubecli.utils import print_success, print_error, print_info
 
-app = typer.Typer(no_args_is_help=False)
-
-@app.command()
-def update():
+def update_cubecli():
     """Update cubecli to the latest version"""
-
     try:
-        cubecli_path = Path(__file__).parent.parent.parent
-
-        print_info("Updating cubecli...")
-        console.print()
+        print_info("Updating cubecli from GitHub...")
 
         result = subprocess.run(
-            ["git", "pull"],
-            cwd=cubecli_path,
+            ["pipx", "install", "--force", "git+https://github.com/CubePathInc/cubecli.git"],
             capture_output=True,
             text=True
         )
 
         if result.returncode != 0:
-            print_error(f"Git pull failed: {result.stderr}")
-            raise typer.Exit(1)
-
-        console.print(result.stdout)
-
-        if "Already up to date" in result.stdout:
-            print_success("cubecli is already up to date!")
-            return
-
-        print_info("Reinstalling cubecli...")
-
-        install_result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-e", "."],
-            cwd=cubecli_path,
-            capture_output=True,
-            text=True
-        )
-
-        if install_result.returncode != 0:
-            print_error(f"Installation failed: {install_result.stderr}")
+            print_error(f"Update failed: {result.stderr}")
             raise typer.Exit(1)
 
         print_success("cubecli updated successfully!")

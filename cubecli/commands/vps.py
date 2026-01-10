@@ -109,7 +109,7 @@ def create(
 def list_vps(
     ctx: typer.Context,
     project_id: Optional[int] = typer.Option(None, "--project", "-p", help="Filter by project ID"),
-    location: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
+    location_filter: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
 ):
     """List all VPS instances"""
     api_token = get_context_value(ctx, "api_token")
@@ -131,7 +131,7 @@ def list_vps(
     
     # The API returns a list directly
     project_list = response if isinstance(response, list) else response.get("projects", [])
-    
+
     # Extract all VPS from all projects
     all_vps = []
     for item in project_list:
@@ -172,8 +172,8 @@ def list_vps(
     if project_id is not None:
         all_vps = [vps for vps in all_vps if vps.get("project_id") == project_id]
 
-    if location is not None:
-        all_vps = [vps for vps in all_vps if vps.get("location_name") == location]
+    if location_filter is not None:
+        all_vps = [vps for vps in all_vps if vps.get("location_name") == location_filter]
 
     if json_output:
         print_json(all_vps)
