@@ -42,7 +42,6 @@ def create(
         print_json(response)
     else:
         print_success(f"Project '{name}' created successfully!")
-        print_success(f"Project ID: {response.get('id', 'N/A')}")
 
 @app.command("list")
 def list_projects(ctx: typer.Context):
@@ -87,8 +86,8 @@ def list_projects(ctx: typer.Context):
                 description = description[:30] + "..."
 
             table.add_row(
-                str(project.get("id", "N/A")),
-                project.get("name", "N/A"),
+                str(project["id"]),
+                project["name"],
                 description,
                 str(vps_count),
                 str(networks_count)
@@ -141,8 +140,8 @@ def show(
         print_json(project_data)
     else:
         console.print()
-        console.print(f"[bold]Project: {project.get('name', 'N/A')}[/bold]")
-        console.print(f"ID: {project.get('id', 'N/A')}")
+        console.print(f"[bold]Project: {project['name']}[/bold]")
+        console.print(f"ID: {project['id']}")
         console.print(f"Description: {project.get('description', 'N/A')}")
         console.print(f"Created: {project.get('created_at', 'N/A')}")
         
@@ -161,8 +160,8 @@ def show(
                 plan_name = plan.get("plan_name", "N/A")
                 
                 vps_table.add_row(
-                    str(vps.get("id", "N/A")),
-                    vps.get("name", "N/A"),
+                    str(vps["id"]),
+                    vps["name"],
                     format_status(vps.get("status", "unknown")),
                     ip_address,
                     plan_name
@@ -176,10 +175,10 @@ def show(
             net_table = create_table(f"Networks in Project ({len(networks)})", ["ID", "Name", "IP Range", "Location"])
             for net in networks:
                 net_table.add_row(
-                    str(net.get("id", "N/A")),
-                    net.get("name", "N/A"),
-                    f"{net.get('ip_range', 'N/A')}/{net.get('prefix', 'N/A')}",
-                    net.get("location_name", "N/A")
+                    str(net["id"]),
+                    net["name"],
+                    f"{net['ip_range']}/{net['prefix']}",
+                    net["location_name"]
                 )
             console.print(net_table)
 

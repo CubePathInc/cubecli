@@ -85,9 +85,9 @@ def list_floating_ips(ctx: typer.Context):
                 server_type = "Baremetal"
 
             table.add_row(
-                ip.get("address", "N/A"),
-                ip.get("ip_type", "N/A"),
-                ip.get("status", "N/A"),
+                ip["address"],
+                ip["ip_type"],
+                ip["status"],
                 server_type,
                 assigned_to,
                 protection,

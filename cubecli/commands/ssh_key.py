@@ -54,7 +54,6 @@ def create(
         print_json(response)
     else:
         print_success(f"SSH key '{name}' created successfully!")
-        print_success(f"Key ID: {response.get('id', 'N/A')}")
 
 @app.command("list")
 def list_keys(ctx: typer.Context):

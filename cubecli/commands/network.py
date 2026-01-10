@@ -61,11 +61,14 @@ def create(
         print_json(response)
     else:
         print_success(f"Network '{name}' created successfully!")
-        print_success(f"Network ID: {response.get('id', 'N/A')}")
         print_success(f"IP Range: {cidr}")
 
 @app.command("list")
-def list_networks(ctx: typer.Context):
+def list_networks(
+    ctx: typer.Context,
+    project_id: Optional[int] = typer.Option(None, "--project", "-p", help="Filter by project ID"),
+    location: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
+):
     """List all networks"""
     api_token = get_context_value(ctx, "api_token")
     json_output = get_context_value(ctx, "json", False)
@@ -97,7 +100,13 @@ def list_networks(ctx: typer.Context):
             network["project_name"] = project.get("name", "N/A")
             network["project_id"] = project.get("id", "N/A")
             all_networks.append(network)
-    
+
+    if project_id is not None:
+        all_networks = [network for network in all_networks if network.get("project_id") == project_id]
+
+    if location is not None:
+        all_networks = [network for network in all_networks if network.get("location_name") == location]
+
     if json_output:
         print_json(all_networks)
     else:
@@ -114,8 +123,8 @@ def list_networks(ctx: typer.Context):
                 str(network["id"]),
                 network["name"],
                 network["project_name"],
-                f"{network.get('ip_range', 'N/A')}/{network.get('prefix', 'N/A')}",
-                network.get("location_name", "N/A"),
+                f"{network['ip_range']}/{network['prefix']}",
+                network["location_name"],
                 str(vps_count)
             )
         

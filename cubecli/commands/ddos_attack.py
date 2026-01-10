@@ -49,13 +49,13 @@ def list_attacks(ctx: typer.Context):
 
         for attack in response:
             # Format the values
-            attack_id = str(attack.get("attack_id", "N/A"))
-            ip_address = attack.get("ip_address", "N/A")
-            start_time = attack.get("start_time", "N/A")
+            attack_id = str(attack["attack_id"])
+            ip_address = attack["ip_address"]
+            start_time = attack["start_time"]
             duration = str(attack.get("duration", 0))
             pps_peak = f"{int(attack.get('packets_second_peak', 0)):,}"
             bps_peak = f"{int(attack.get('bytes_second_peak', 0)):,}"
-            status = attack.get("status", "N/A")
+            status = attack["status"]
             description = attack.get("description", "Unknown")
 
             table.add_row(

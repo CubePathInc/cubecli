@@ -108,7 +108,11 @@ def deploy(
         print_success("Server is being provisioned. Use 'cubecli baremetal list' to check status.")
 
 @app.command("list")
-def list_baremetal(ctx: typer.Context):
+def list_baremetal(
+    ctx: typer.Context,
+    project_id: Optional[int] = typer.Option(None, "--project", "-p", help="Filter by project ID"),
+    location: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
+):
     """List all baremetal servers"""
     api_token = get_context_value(ctx, "api_token")
     json_output = get_context_value(ctx, "json", False)
@@ -143,9 +147,9 @@ def list_baremetal(ctx: typer.Context):
             if floating_ips and len(floating_ips) > 0:
                 ipv4_ips = [ip for ip in floating_ips if ip.get("type") == "IPv4"]
                 if ipv4_ips:
-                    server["main_ip"] = ipv4_ips[0].get("address", "N/A")
+                    server["main_ip"] = ipv4_ips[0]["address"]
                 else:
-                    server["main_ip"] = floating_ips[0].get("address", "N/A")
+                    server["main_ip"] = floating_ips[0]["address"]
             else:
                 server["main_ip"] = "N/A"
 
@@ -163,6 +167,12 @@ def list_baremetal(ctx: typer.Context):
 
             all_baremetal.append(server)
 
+    if project_id is not None:
+        all_baremetal = [server for server in all_baremetal if server.get("project_id") == project_id]
+
+    if location is not None:
+        all_baremetal = [server for server in all_baremetal if server.get("location_name") == location]
+
     if json_output:
         print_json(all_baremetal)
     else:
@@ -179,7 +189,7 @@ def list_baremetal(ctx: typer.Context):
 
             table.add_row(
                 str(server["id"]),
-                server.get("hostname", "N/A"),
+                server["hostname"],
                 server["project_name"],
                 format_status(server.get("status", "unknown")),
                 server.get("main_ip", "N/A"),
@@ -233,9 +243,9 @@ def show(
                 if floating_ips and len(floating_ips) > 0:
                     ipv4_ips = [ip for ip in floating_ips if ip.get("type") == "IPv4"]
                     if ipv4_ips:
-                        server["main_ip"] = ipv4_ips[0].get("address", "N/A")
+                        server["main_ip"] = ipv4_ips[0]["address"]
                     else:
-                        server["main_ip"] = floating_ips[0].get("address", "N/A")
+                        server["main_ip"] = floating_ips[0]["address"]
                 else:
                     server["main_ip"] = "N/A"
 
@@ -261,8 +271,8 @@ def show(
         info_table.add_column("Property", style="bold")
         info_table.add_column("Value")
 
-        info_table.add_row("Hostname", server_found.get('hostname', 'N/A'))
-        info_table.add_row("ID", str(server_found.get('id', 'N/A')))
+        info_table.add_row("Hostname", server_found['hostname'])
+        info_table.add_row("ID", str(server_found['id']))
         info_table.add_row("Status", format_status(server_found.get('status', 'unknown')))
         info_table.add_row("Project", server_found.get('project_name', 'N/A'))
         info_table.add_row("Location", server_found.get('location_name', 'N/A'))
@@ -308,7 +318,7 @@ def show(
         floating_ips = server_found.get('floating_ips', [])
         for ip in floating_ips:
             ip_type = ip.get('type', 'Unknown')
-            address = ip.get('address', 'N/A')
+            address = ip['address']
             protection = ip.get('protection_type', 'None')
 
             if ip_type == 'IPv4':
@@ -809,7 +819,7 @@ def monitoring_status(
         status_table.add_column("Value")
 
         status_table.add_row("Server ID", str(baremetal_id))
-        status_table.add_row("Hostname", server_found.get('hostname', 'N/A'))
+        status_table.add_row("Hostname", server_found['hostname'])
         status_table.add_row("Monitoring", "[green]Enabled[/green]" if monitoring else "[red]Disabled[/red]")
 
         console.print(status_table)

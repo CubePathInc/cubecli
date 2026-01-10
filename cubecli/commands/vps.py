@@ -106,7 +106,11 @@ def create(
         print_success("VPS is being provisioned. Use 'cubecli vps list' to check status.")
 
 @app.command("list")
-def list_vps(ctx: typer.Context):
+def list_vps(
+    ctx: typer.Context,
+    project_id: Optional[int] = typer.Option(None, "--project", "-p", help="Filter by project ID"),
+    location: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
+):
     """List all VPS instances"""
     api_token = get_context_value(ctx, "api_token")
     json_output = get_context_value(ctx, "json", False)
@@ -148,10 +152,10 @@ def list_vps(ctx: typer.Context):
                 # Get the first IPv4 address
                 ipv4_ips = [ip for ip in floating_ips if ip.get("type") == "IPv4"]
                 if ipv4_ips:
-                    vps["main_ip"] = ipv4_ips[0].get("address", "N/A")
+                    vps["main_ip"] = ipv4_ips[0]["address"]
                 else:
                     # If no IPv4, get the first IP
-                    vps["main_ip"] = floating_ips[0].get("address", "N/A")
+                    vps["main_ip"] = floating_ips[0]["address"]
             else:
                 vps["main_ip"] = "N/A"
             # Extract plan name
@@ -164,7 +168,13 @@ def list_vps(ctx: typer.Context):
             location = vps.get("location", {})
             vps["location_name"] = location.get("location_name", "N/A")
             all_vps.append(vps)
-    
+
+    if project_id is not None:
+        all_vps = [vps for vps in all_vps if vps.get("project_id") == project_id]
+
+    if location is not None:
+        all_vps = [vps for vps in all_vps if vps.get("location_name") == location]
+
     if json_output:
         print_json(all_vps)
     else:
@@ -177,7 +187,7 @@ def list_vps(ctx: typer.Context):
         for vps in all_vps:
             table.add_row(
                 str(vps["id"]),
-                vps.get("name", "N/A"),
+                vps["name"],
                 vps["project_name"],
                 format_status(vps.get("status", "unknown")),
                 vps.get("main_ip", "N/A"),
@@ -230,10 +240,10 @@ def show(
                     # Get the first IPv4 address
                     ipv4_ips = [ip for ip in floating_ips if ip.get("type") == "IPv4"]
                     if ipv4_ips:
-                        vps["main_ip"] = ipv4_ips[0].get("address", "N/A")
+                        vps["main_ip"] = ipv4_ips[0]["address"]
                     else:
                         # If no IPv4, get the first IP
-                        vps["main_ip"] = floating_ips[0].get("address", "N/A")
+                        vps["main_ip"] = floating_ips[0]["address"]
                 else:
                     vps["main_ip"] = "N/A"
                 plan = vps.get("plan", {})
@@ -261,8 +271,8 @@ def show(
         info_table.add_column("Property", style="bold")
         info_table.add_column("Value")
         
-        info_table.add_row("VPS Name", vps_found.get('name', 'N/A'))
-        info_table.add_row("ID", str(vps_found.get('id', 'N/A')))
+        info_table.add_row("VPS Name", vps_found['name'])
+        info_table.add_row("ID", str(vps_found['id']))
         info_table.add_row("Status", format_status(vps_found.get('status', 'unknown')))
         info_table.add_row("Project", vps_found.get('project_name', 'N/A'))
         info_table.add_row("Location", vps_found.get('location_name', 'N/A'))
@@ -297,7 +307,7 @@ def show(
         floating_ips = vps_found.get('floating_ips', [])
         for ip in floating_ips:
             ip_type = ip.get('type', 'Unknown')
-            address = ip.get('address', 'N/A')
+            address = ip['address']
             if ip_type == 'IPv4':
                 net_table.add_row("Public IPv4", f"[bold green]{address}[/bold green]")
             elif ip_type == 'IPv6':
@@ -674,8 +684,8 @@ def template_list(ctx: typer.Context):
 
         for template in sorted_templates:
             table.add_row(
-                template.get("template_name", "N/A"),
-                template.get("os_name", "N/A"),
+                template["template_name"],
+                template["os_name"],
                 template.get("version", "N/A")
             )
 
