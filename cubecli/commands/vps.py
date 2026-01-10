@@ -238,7 +238,12 @@ def show(
             if vps.get("id") == vps_id:
                 vps["project_name"] = project.get("name", "N/A")
                 # Extract additional info
-                floating_ips = vps.get("floating_ips", [])
+                floating_ips_data = vps.get("floating_ips", {})
+                if isinstance(floating_ips_data, dict):
+                    floating_ips = floating_ips_data.get("list", [])
+                else:
+                    floating_ips = floating_ips_data if floating_ips_data else []
+
                 if floating_ips and len(floating_ips) > 0:
                     # Get the first IPv4 address
                     ipv4_ips = [ip for ip in floating_ips if ip.get("type") == "IPv4"]
@@ -307,7 +312,12 @@ def show(
         net_table.add_column("Details", style="white")
         
         # Add floating IPs
-        floating_ips = vps_found.get('floating_ips', [])
+        floating_ips_data = vps_found.get('floating_ips', {})
+        if isinstance(floating_ips_data, dict):
+            floating_ips = floating_ips_data.get("list", [])
+        else:
+            floating_ips = floating_ips_data if floating_ips_data else []
+
         for ip in floating_ips:
             ip_type = ip.get('type', 'Unknown')
             address = ip['address']
@@ -317,7 +327,7 @@ def show(
                 net_table.add_row("Public IPv6", f"[green]{address}[/green]")
             else:
                 net_table.add_row(f"Public {ip_type}", address)
-        
+
         # Add IPv6 if available (legacy support)
         ipv6 = vps_found.get('ipv6')
         if ipv6 and not any(ip.get('type') == 'IPv6' for ip in floating_ips):
