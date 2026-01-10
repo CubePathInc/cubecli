@@ -12,6 +12,8 @@ app = typer.Typer(no_args_is_help=True)
 @app.command("list")
 def list_floating_ips(
     ctx: typer.Context,
+    server_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by server type (vps or baremetal)"),
+    location: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location"),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
@@ -20,6 +22,11 @@ def list_floating_ips(
 
     if not api_token:
         print_error("No API token configured")
+        raise typer.Exit(1)
+
+    # Validate server_type if provided
+    if server_type and server_type.lower() not in ["vps", "baremetal"]:
+        print_error("Invalid server type. Use 'vps' or 'baremetal'")
         raise typer.Exit(1)
 
     client = APIClient(api_token)
@@ -55,6 +62,30 @@ def list_floating_ips(
             ip_info["protection_type"] = subnet.get("protection_type", "N/A")
             all_floating_ips.append(ip_info)
 
+    # Apply filters
+    filtered_ips = all_floating_ips
+
+    if server_type:
+        server_type_normalized = server_type.lower()
+        filtered_ips = []
+        for ip in all_floating_ips:
+            vps_name = ip.get("vps_name")
+            baremetal_name = ip.get("baremetal_name")
+
+            if server_type_normalized == "vps" and vps_name:
+                filtered_ips.append(ip)
+            elif server_type_normalized == "baremetal" and baremetal_name:
+                filtered_ips.append(ip)
+
+    if location:
+        location_normalized = location.lower()
+        filtered_ips = [
+            ip for ip in filtered_ips
+            if ip.get("location_name", "").lower() == location_normalized
+        ]
+
+    all_floating_ips = filtered_ips
+
     if json_output:
         print_json(all_floating_ips)
     else:
@@ -63,10 +94,14 @@ def list_floating_ips(
             return
 
         console.print()
-        table = create_table(
-            "Floating IPs",
-            ["IP Address", "Type", "Status", "Server Type", "Assigned To", "DDoS Protection", "Location"]
-        )
+
+        # Define columns based on verbose flag
+        if verbose:
+            columns = ["IP Address", "Type", "Status", "Server Type", "Assigned To", "DDoS Protection", "Location"]
+        else:
+            columns = ["IP Address", "Status", "Assigned To", "Location"]
+
+        table = create_table("Floating IPs", columns)
 
         for ip in all_floating_ips:
             # Format protection type
@@ -87,14 +122,22 @@ def list_floating_ips(
                 assigned_to = baremetal_name
                 server_type = "Baremetal"
 
-            table.add_row(
-                ip["address"],
-                ip["ip_type"],
-                ip["status"],
-                server_type,
-                assigned_to,
-                protection,
-                ip.get("location_name", "N/A")
-            )
+            if verbose:
+                table.add_row(
+                    ip["address"],
+                    ip["ip_type"],
+                    ip["status"],
+                    server_type,
+                    assigned_to,
+                    protection,
+                    ip.get("location_name", "N/A")
+                )
+            else:
+                table.add_row(
+                    ip["address"],
+                    ip["status"],
+                    assigned_to,
+                    ip.get("location_name", "N/A")
+                )
 
         console.print(table)

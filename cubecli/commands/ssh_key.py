@@ -91,17 +91,17 @@ def list_keys(
         if not ssh_keys:
             print_error("No SSH keys found")
             return
-        
-        table = create_table("SSH Keys", ["ID", "Name", "Key (truncated)"])
+
+        table = create_table("SSH Keys", ["ID", "Name", "Type", "Fingerprint"])
 
         for key in ssh_keys:
-            key_preview = key["ssh_key"][:50] + "..." if len(key["ssh_key"]) > 50 else key["ssh_key"]
             table.add_row(
                 str(key["id"]),
                 key["name"],
-                key_preview
+                key.get("key_type", "N/A"),
+                key.get("fingerprint", "N/A")
             )
-        
+
         console.print()
         console.print(table)
 
