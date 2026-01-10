@@ -44,7 +44,6 @@ def deploy(
 ):
     """Deploy a new baremetal server"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -111,11 +110,12 @@ def deploy(
 def list_baremetal(
     ctx: typer.Context,
     project_id: Optional[int] = typer.Option(None, "--project", "-p", help="Filter by project ID"),
-    location_filter: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
+    location_filter: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """List all baremetal servers"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -206,10 +206,11 @@ def list_baremetal(
 def show(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Show detailed baremetal server information"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -360,7 +361,6 @@ def sensors(
 ):
     """Get BMC sensor data (temperatures, fans, etc.)"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -455,7 +455,6 @@ def power_restart(
 def _power_action(ctx: typer.Context, baremetal_id: int, action: str, verb: str):
     """Common power action handler"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -505,7 +504,6 @@ def reinstall_start(
 ):
     """Start OS reinstallation on a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -561,7 +559,6 @@ def reinstall_status(
 ):
     """Check reinstallation status"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -601,7 +598,6 @@ def rescue(
 ):
     """Enable rescue mode on a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -644,7 +640,6 @@ def reset_bmc(
 ):
     """Reset the BMC (Baseboard Management Controller)"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -680,7 +675,6 @@ def update(
 ):
     """Update baremetal server details (hostname and/or tags)"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -718,7 +712,6 @@ def monitoring_enable(
 ):
     """Enable monitoring for a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -746,7 +739,6 @@ def monitoring_disable(
 ):
     """Disable monitoring for a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -774,7 +766,6 @@ def monitoring_status(
 ):
     """Check monitoring status for a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -831,7 +822,6 @@ def ipmi(
 ):
     """Get IPMI console access credentials"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -878,7 +868,6 @@ def list_models(
 ):
     """List available baremetal models with pricing by location"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")

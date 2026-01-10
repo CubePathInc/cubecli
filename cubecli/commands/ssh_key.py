@@ -16,10 +16,11 @@ def create(
     name: str = typer.Option(..., "--name", "-n", help="Name for the SSH key"),
     public_key_from_file: Optional[Path] = typer.Option(None, "--public-key-from-file", "-f", help="Path to public key file"),
     public_key: Optional[str] = typer.Option(None, "--public-key", "-k", help="Public key string"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Create a new SSH key"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -56,10 +57,13 @@ def create(
         print_success(f"SSH key '{name}' created successfully!")
 
 @app.command("list")
-def list_keys(ctx: typer.Context):
+def list_keys(
+    ctx: typer.Context,
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+):
     """List all SSH keys"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -106,10 +110,11 @@ def delete(
     ctx: typer.Context,
     key_id: int = typer.Argument(..., help="SSH key ID to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Delete an SSH key"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")

@@ -143,7 +143,7 @@ def handle_api_exception(e: Exception, progress=None):
             progress.refresh()
         except:
             pass
-    
+
     if isinstance(e, httpx.HTTPStatusError):
         # Try to get error message from response body
         error_detail = "Unknown error"
@@ -155,7 +155,7 @@ def handle_api_exception(e: Exception, progress=None):
                 error_detail = str(error_data)
         except:
             error_detail = e.response.text or str(e)
-        
+
         # Clean up the error detail if it's a JSON string
         if error_detail.startswith('{"detail":"') and error_detail.endswith('"}'):
             try:
@@ -164,11 +164,34 @@ def handle_api_exception(e: Exception, progress=None):
                 error_detail = error_dict.get("detail", error_detail)
             except:
                 pass
-        
+
         print_error(f"{error_detail}")
     elif isinstance(e, httpx.RequestError):
         print_error(f"Network error: {str(e)}")
     else:
         print_error(f"Unexpected error: {str(e)}")
-    
+
     raise typer.Exit(1)
+
+# Common options for commands
+def common_options(verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+                   json_output: bool = typer.Option(False, "--json", help="Output in JSON format")):
+    """Common options decorator for commands"""
+    return {"verbose": verbose, "json": json_output}
+
+def add_common_callback(app: typer.Typer):
+    """Add common callback with --verbose and --json options to a Typer app"""
+    @app.callback()
+    def callback(
+        ctx: typer.Context,
+        json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+        verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    ):
+        """Common options for all subcommands"""
+        ctx.ensure_object(dict)
+        # Merge parent context if it exists
+        if ctx.parent and ctx.parent.obj:
+            ctx.obj.update(ctx.parent.obj)
+        # Set or override with local options
+        ctx.obj["json"] = json_output
+        ctx.obj["verbose"] = verbose

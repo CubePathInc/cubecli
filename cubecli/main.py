@@ -30,24 +30,14 @@ app.add_typer(floating_ip.app, name="floating-ip", help="Manage floating IPs")
 app.add_typer(ddos_attack.app, name="ddos-attack", help="View DDoS attack history")
 app.command(name="update", help="Update cubecli to the latest version")(update_cubecli)
 
-# Global options
-verbose_option = typer.Option(False, "--verbose", "-v", help="Enable verbose output")
-json_option = typer.Option(False, "--json", help="Output in JSON format")
-
 @app.callback()
-def main(
-    ctx: typer.Context,
-    verbose: bool = verbose_option,
-    json_output: bool = json_option,
-):
+def main(ctx: typer.Context):
     """
     CubePath Cloud CLI - Manage your cloud infrastructure
     """
-    # Store global options in context
+    # Store config in context
     ctx.ensure_object(dict)
-    ctx.obj["verbose"] = verbose
-    ctx.obj["json"] = json_output
-    
+
     # Check for configuration on commands that need it
     if ctx.invoked_subcommand and ctx.invoked_subcommand != "config":
         try:

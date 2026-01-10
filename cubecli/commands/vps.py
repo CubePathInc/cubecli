@@ -37,10 +37,11 @@ def create(
     network_id: Optional[int] = typer.Option(None, "--network", help="Network ID"),
     label: Optional[str] = typer.Option(None, "--label", help="VPS label"),
     password: Optional[str] = typer.Option(None, "--password", help="Root password"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Create a new VPS"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
@@ -109,11 +110,12 @@ def create(
 def list_vps(
     ctx: typer.Context,
     project_id: Optional[int] = typer.Option(None, "--project", "-p", help="Filter by project ID"),
-    location_filter: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
+    location_filter: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """List all VPS instances"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -203,10 +205,11 @@ def list_vps(
 def show(
     ctx: typer.Context,
     vps_id: int = typer.Argument(..., help="VPS ID to show"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Show detailed VPS information"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -351,10 +354,11 @@ def destroy(
     ctx: typer.Context,
     vps_id: int = typer.Argument(..., help="VPS ID to destroy"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Destroy a VPS"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -386,38 +390,45 @@ def destroy(
 def power_start(
     ctx: typer.Context,
     vps_id: int = typer.Argument(..., help="VPS ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Start a VPS"""
-    _power_action(ctx, vps_id, "start_vps", "Starting")
+    _power_action(ctx, vps_id, "start_vps", "Starting", json_output)
 
 @power_app.command("stop")
 def power_stop(
     ctx: typer.Context,
     vps_id: int = typer.Argument(..., help="VPS ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Stop a VPS"""
-    _power_action(ctx, vps_id, "stop_vps", "Stopping")
+    _power_action(ctx, vps_id, "stop_vps", "Stopping", json_output)
 
 @power_app.command("restart")
 def power_restart(
     ctx: typer.Context,
     vps_id: int = typer.Argument(..., help="VPS ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Restart a VPS"""
-    _power_action(ctx, vps_id, "restart_vps", "Restarting")
+    _power_action(ctx, vps_id, "restart_vps", "Restarting", json_output)
 
 @power_app.command("reset")
 def power_reset(
     ctx: typer.Context,
     vps_id: int = typer.Argument(..., help="VPS ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Force reset a VPS"""
-    _power_action(ctx, vps_id, "reset_vps", "Resetting")
+    _power_action(ctx, vps_id, "reset_vps", "Resetting", json_output)
 
-def _power_action(ctx: typer.Context, vps_id: int, action: str, verb: str):
+def _power_action(ctx: typer.Context, vps_id: int, action: str, verb: str, json_output: bool = False):
     """Common power action handler"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -464,10 +475,11 @@ def resize(
     ctx: typer.Context,
     vps_id: int = typer.Argument(..., help="VPS ID to resize"),
     plan: str = typer.Option(..., "--plan", "-p", help="New plan name"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Resize a VPS to a different plan"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -499,10 +511,11 @@ def change_password(
     ctx: typer.Context,
     vps_id: int = typer.Argument(..., help="VPS ID"),
     new_password: str = typer.Option(..., "--new-password", "-p", help="New root password"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Change VPS root password"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -531,10 +544,11 @@ def reinstall(
     vps_id: int = typer.Argument(..., help="VPS ID to reinstall"),
     template: str = typer.Option(..., "--template", "-t", help="Template name (e.g., 'Debian 12')"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Reinstall VPS with a new template"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -577,10 +591,13 @@ def reinstall(
             print_success(f"Task ID: {response['task_id']}")
 
 @plan_app.command("list")
-def plan_list(ctx: typer.Context):
+def plan_list(
+    ctx: typer.Context,
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+):
     """List all available VPS plans with pricing by location"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -646,10 +663,13 @@ def plan_list(ctx: typer.Context):
                     console.print(table)
 
 @template_app.command("list")
-def template_list(ctx: typer.Context):
+def template_list(
+    ctx: typer.Context,
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+):
     """List all available VPS templates"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")

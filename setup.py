@@ -8,7 +8,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="cubecli",
-    version="0.1.0",
+    version="1.2.0",
     author="CubePath",
     author_email="admin@cubepath.com",
     description="CLI tool for CubePath Cloud API",

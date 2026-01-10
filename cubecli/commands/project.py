@@ -15,10 +15,11 @@ def create(
     ctx: typer.Context,
     name: str = typer.Option(..., "--name", "-n", help="Project name"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Project description"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Create a new project"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -44,10 +45,13 @@ def create(
         print_success(f"Project '{name}' created successfully!")
 
 @app.command("list")
-def list_projects(ctx: typer.Context):
+def list_projects(
+    ctx: typer.Context,
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+):
     """List all projects"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -100,10 +104,11 @@ def list_projects(ctx: typer.Context):
 def show(
     ctx: typer.Context,
     project_id: int = typer.Argument(..., help="Project ID to show"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Show detailed project information"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -187,10 +192,11 @@ def delete(
     ctx: typer.Context,
     project_id: int = typer.Argument(..., help="Project ID to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Delete a project"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")

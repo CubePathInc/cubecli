@@ -17,10 +17,11 @@ def create(
     cidr: str = typer.Option(..., "--cidr", "-c", help="Network CIDR (e.g., 10.0.0.0/24)"),
     project_id: int = typer.Option(..., "--project", "-p", help="Project ID"),
     label: Optional[str] = typer.Option(None, "--label", help="Network label"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Create a new network"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -67,11 +68,12 @@ def create(
 def list_networks(
     ctx: typer.Context,
     project_id: Optional[int] = typer.Option(None, "--project", "-p", help="Filter by project ID"),
-    location_filter: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name")
+    location_filter: Optional[str] = typer.Option(None, "--location", "-l", help="Filter by location name"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """List all networks"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -137,10 +139,11 @@ def update(
     network_id: int = typer.Argument(..., help="Network ID to update"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="New network name"),
     label: Optional[str] = typer.Option(None, "--label", help="New network label"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Update a network"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")
@@ -176,10 +179,11 @@ def delete(
     ctx: typer.Context,
     network_id: int = typer.Argument(..., help="Network ID to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Delete a network"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
     
     if not api_token:
         print_error("No API token configured")

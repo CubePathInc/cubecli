@@ -10,10 +10,13 @@ import httpx
 app = typer.Typer(no_args_is_help=True)
 
 @app.command("list")
-def list_attacks(ctx: typer.Context):
+def list_attacks(
+    ctx: typer.Context,
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+):
     """List recent DDoS attacks"""
     api_token = get_context_value(ctx, "api_token")
-    json_output = get_context_value(ctx, "json", False)
 
     if not api_token:
         print_error("No API token configured")
