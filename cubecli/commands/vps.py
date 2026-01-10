@@ -275,36 +275,40 @@ def show(
     else:
         console.print()
         
-        # Basic info table
-        info_table = Table(show_header=False, box=box.ROUNDED, show_lines=True)
+        # VPS Details table
+        info_table = Table(title="VPS Details", box=box.ROUNDED, show_lines=True, title_style="bold green")
         info_table.add_column("Property", style="bold")
         info_table.add_column("Value")
-        
-        info_table.add_row("VPS Name", vps_found['name'])
+
+        info_table.add_row("Name", vps_found['name'])
         info_table.add_row("ID", str(vps_found['id']))
         info_table.add_row("Status", format_status(vps_found.get('status', 'unknown')))
         info_table.add_row("Project", vps_found.get('project_name', 'N/A'))
         info_table.add_row("Location", vps_found.get('location_name', 'N/A'))
+        info_table.add_row("OS", vps_found.get('os_name', 'N/A'))
+        info_table.add_row("Username", vps_found.get('user', 'root'))
 
-        # Plan details table
+        # Check if SSH keys are attached
+        ssh_keys = vps_found.get('ssh_keys', [])
+        if ssh_keys:
+            ssh_key_names = [key.get('name', 'N/A') for key in ssh_keys]
+            info_table.add_row("SSH Keys", ", ".join(ssh_key_names))
+
+        # Resources & Network table
+        resources_table = Table(title="Resources & Network", box=box.ROUNDED, show_lines=True, title_style="bold green")
+        resources_table.add_column("Property", style="bold cyan")
+        resources_table.add_column("Value", style="white")
+
+        # Add plan details
         plan = vps_found.get('plan', {})
-        plan_table = Table(title="Plan Details", box=box.ROUNDED, show_lines=True, title_style="bold green")
-        plan_table.add_column("Resource", style="bold")
-        plan_table.add_column("Value")
-
         if plan:
-            plan_table.add_row("Plan", plan.get('plan_name', 'N/A'))
-            plan_table.add_row("vCPUs", str(plan.get('cpu', 'N/A')))
-            plan_table.add_row("RAM", f"{plan.get('ram', 0)} MB")
-            plan_table.add_row("Storage", f"{plan.get('storage', 0)} GB")
-            plan_table.add_row("Bandwidth", f"{plan.get('bandwidth', 0)} GB")
-            plan_table.add_row("Price/Hour", f"${plan.get('price_per_hour', 0)}")
+            resources_table.add_row("Plan", plan.get('plan_name', 'N/A'))
+            resources_table.add_row("vCPUs", str(plan.get('cpu', 'N/A')))
+            resources_table.add_row("RAM", f"{plan.get('ram', 0)} MB")
+            resources_table.add_row("Storage", f"{plan.get('storage', 0)} GB")
+            resources_table.add_row("Bandwidth", f"{plan.get('bandwidth', 0)} GB")
+            resources_table.add_row("Price/Hour", f"${plan.get('price_per_hour', 0)}")
 
-        # Network info table
-        net_table = Table(title="Network Information", box=box.ROUNDED, show_lines=True, title_style="bold green")
-        net_table.add_column("Type", style="bold cyan")
-        net_table.add_column("Details", style="white")
-        
         # Add floating IPs
         floating_ips_data = vps_found.get('floating_ips', {})
         if isinstance(floating_ips_data, dict):
@@ -316,42 +320,26 @@ def show(
             ip_type = ip.get('type', 'Unknown')
             address = ip['address']
             if ip_type == 'IPv4':
-                net_table.add_row("Public IPv4", f"[bold green]{address}[/bold green]")
+                resources_table.add_row("Public IPv4", f"[bold green]{address}[/bold green]")
             elif ip_type == 'IPv6':
-                net_table.add_row("Public IPv6", f"[green]{address}[/green]")
+                resources_table.add_row("Public IPv6", f"[green]{address}[/green]")
             else:
-                net_table.add_row(f"Public {ip_type}", address)
+                resources_table.add_row(f"Public {ip_type}", address)
 
         # Add IPv6 if available (legacy support)
         ipv6 = vps_found.get('ipv6')
         if ipv6 and not any(ip.get('type') == 'IPv6' for ip in floating_ips):
-            net_table.add_row("Public IPv6", f"[green]{ipv6}[/green]")
-        
+            resources_table.add_row("Public IPv6", f"[green]{ipv6}[/green]")
+
         # Add network info if available
         network = vps_found.get('network')
         if network:
             network_name = network.get('name', 'N/A')
             assigned_ip = network.get('assigned_ip', 'N/A')
-            net_table.add_row("Private Network", f"[yellow]{network_name}[/yellow] → [dim]{assigned_ip}[/dim]")
-
-        # Access info table
-        access_table = Table(title="Access Information", box=box.ROUNDED, show_lines=True, title_style="bold green")
-        access_table.add_column("Property", style="bold")
-        access_table.add_column("Value")
-
-        access_table.add_row("OS", vps_found.get('os_name', 'N/A'))
-        access_table.add_row("Username", vps_found.get('user', 'root'))
-
-        # Check if SSH keys are attached (supports multiple keys)
-        ssh_keys = vps_found.get('ssh_keys', [])
-        if ssh_keys:
-            ssh_key_names = [key.get('name', 'N/A') for key in ssh_keys]
-            access_table.add_row("SSH Keys", ", ".join(ssh_key_names))
+            resources_table.add_row("Private Network", f"[yellow]{network_name}[/yellow] → [dim]{assigned_ip}[/dim]")
 
         # Print tables in two columns with equal width
-        console.print(Columns([info_table, plan_table], equal=True, expand=True))
-        console.print()
-        console.print(Columns([net_table, access_table], equal=True, expand=True))
+        console.print(Columns([info_table, resources_table], equal=True, expand=True))
 
 @app.command()
 def destroy(
