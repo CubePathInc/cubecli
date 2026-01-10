@@ -33,7 +33,7 @@ def create(
     template: str = typer.Option(..., "--template", "-t", help="Template name (e.g., debian-12)"),
     project_id: int = typer.Option(..., "--project", help="Project ID"),
     location: str = typer.Option(..., "--location", "-l", help="Location name"),
-    ssh_key: Optional[str] = typer.Option(None, "--ssh", "-s", help="SSH key name"),
+    ssh_keys: Optional[list[str]] = typer.Option(None, "--ssh", "-s", help="SSH key name (can be used multiple times)"),
     network_id: Optional[int] = typer.Option(None, "--network", help="Network ID"),
     label: Optional[str] = typer.Option(None, "--label", help="VPS label"),
     password: Optional[str] = typer.Option(None, "--password", help="Root password"),
@@ -47,11 +47,11 @@ def create(
         raise typer.Exit(1)
 
     # Require either SSH key or password
-    if not ssh_key and not password:
+    if not ssh_keys and not password:
         raise typer.BadParameter("You must provide either --ssh (SSH key) or --password")
-    
+
     client = APIClient(api_token)
-    
+
     data = {
         "name": name,
         "plan_name": plan,
@@ -59,9 +59,9 @@ def create(
         "location_name": location,
         "label": label or name
     }
-    
-    if ssh_key:
-        data["ssh_key_name"] = ssh_key
+
+    if ssh_keys:
+        data["ssh_key_names"] = ssh_keys
     if network_id:
         data["network_id"] = network_id
     if password:
@@ -324,15 +324,16 @@ def show(
         access_table = Table(title="Access Information", box=box.ROUNDED, show_lines=True, title_style="bold green")
         access_table.add_column("Property", style="bold")
         access_table.add_column("Value")
-        
+
         access_table.add_row("OS", vps_found.get('os_name', 'N/A'))
         access_table.add_row("Username", vps_found.get('user', 'root'))
-        
-        # Check if SSH key is attached
-        ssh_key = vps_found.get('ssh_key')
-        if ssh_key:
-            access_table.add_row("SSH Key", ssh_key.get('name', 'N/A'))
-        
+
+        # Check if SSH keys are attached (supports multiple keys)
+        ssh_keys = vps_found.get('ssh_keys', [])
+        if ssh_keys:
+            ssh_key_names = [key.get('name', 'N/A') for key in ssh_keys]
+            access_table.add_row("SSH Keys", ", ".join(ssh_key_names))
+
         console.print(access_table)
 
 @app.command()
