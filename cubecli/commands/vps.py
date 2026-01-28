@@ -38,6 +38,10 @@ def create(
     network_id: Optional[int] = typer.Option(None, "--network", help="Network ID"),
     label: Optional[str] = typer.Option(None, "--label", help="VPS label"),
     password: Optional[str] = typer.Option(None, "--password", help="Root password"),
+    ipv4: bool = typer.Option(True, "--ipv4/--no-ipv4", help="Enable IPv4 (adds $1.50/month, IPv6 always included)"),
+    firewall: Optional[int] = typer.Option(None, "--firewall", "-fw", help="Firewall group ID to attach"),
+    backups: bool = typer.Option(False, "--backups/--no-backups", help="Enable automatic backups"),
+    cloudinit: Optional[str] = typer.Option(None, "--cloudinit", "-c", help="Cloud-init config (file path or YAML string, Linux only)"),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
@@ -59,7 +63,9 @@ def create(
         "plan_name": plan,
         "template_name": template,
         "location_name": location,
-        "label": label or name
+        "label": label or name,
+        "ipv4": ipv4,
+        "enable_backups": backups,
     }
 
     if ssh_keys:
@@ -68,6 +74,21 @@ def create(
         data["network_id"] = network_id
     if password:
         data["password"] = password
+    if firewall:
+        data["firewall_group_ids"] = [firewall]
+
+    # Process cloud-init: can be a file path or direct YAML content
+    if cloudinit:
+        import os
+        if os.path.isfile(cloudinit):
+            try:
+                with open(cloudinit, 'r') as f:
+                    data["custom_cloudinit"] = f.read()
+            except Exception as e:
+                print_error(f"Failed to read cloud-init file: {e}")
+                raise typer.Exit(1)
+        else:
+            data["custom_cloudinit"] = cloudinit
     
     # Use progress bar for VPS creation
     with Progress(
