@@ -1,5 +1,6 @@
 import httpx
 from typing import Dict, Any, Optional, List
+from cubecli import __version__
 from cubecli.config import get_api_url
 
 class APIClient:
@@ -11,6 +12,7 @@ class APIClient:
         self.headers = {
             "Authorization": f"Bearer {api_token}",
             "Content-Type": "application/json",
+            "User-Agent": f"CubeCLI/{__version__}",
         }
     
     def _handle_response(self, response: httpx.Response) -> Dict[str, Any]:
