@@ -205,6 +205,6 @@ def delete(
             handle_api_exception(e, progress)
     
     if json_output:
-        print_json({"message": "Network deleted successfully", "network_id": network_id})
+        print_json({"detail": "Network deleted successfully", "network_id": network_id})
     else:
         print_success(f"Network {network_id} deleted successfully!")

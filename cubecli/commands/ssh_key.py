@@ -136,6 +136,6 @@ def delete(
             handle_api_exception(e, progress)
     
     if json_output:
-        print_json({"message": "SSH key deleted successfully", "key_id": key_id})
+        print_json({"detail": "SSH key deleted successfully", "key_id": key_id})
     else:
         print_success(f"SSH key {key_id} deleted successfully!")

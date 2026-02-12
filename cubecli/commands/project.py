@@ -218,6 +218,6 @@ def delete(
             handle_api_exception(e, progress)
     
     if json_output:
-        print_json({"message": "Project deleted successfully", "project_id": project_id})
+        print_json({"detail": "Project deleted successfully", "project_id": project_id})
     else:
         print_success(f"Project {project_id} deleted successfully!")
