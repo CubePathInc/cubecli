@@ -40,7 +40,8 @@ def deploy(
     label: Optional[str] = typer.Option(None, "--label", help="Server label"),
     os_name: Optional[str] = typer.Option(None, "--os", help="Operating system name"),
     disk_layout: Optional[str] = typer.Option(None, "--disk-layout", help="Disk layout name"),
-    ssh_key: Optional[str] = typer.Option(None, "--ssh-key", help="SSH key name"),
+    ssh_keys: Optional[list[str]] = typer.Option(None, "--ssh", "-s", help="SSH key name (can be used multiple times)"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Deploy a new baremetal server"""
     api_token = get_context_value(ctx, "api_token")
@@ -64,9 +65,10 @@ def deploy(
         data["os_name"] = os_name
     if disk_layout:
         data["disk_layout_name"] = disk_layout
-    if ssh_key:
-        data["ssh_key_name"] = ssh_key
+    if ssh_keys:
+        data["ssh_key_names"] = ssh_keys
 
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
     with Progress(
         SpinnerColumn(spinner_name="dots", style="green"),
         TextColumn("[progress.description]{task.description}"),
@@ -74,7 +76,6 @@ def deploy(
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         transient=True,
     ) as progress:
-        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
         task = progress.add_task("Deploying baremetal server...", total=100)
 
         try:
@@ -358,6 +359,7 @@ def show(
 def sensors(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Get BMC sensor data (temperatures, fans, etc.)"""
     api_token = get_context_value(ctx, "api_token")
@@ -432,27 +434,30 @@ def sensors(
 def power_start(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Start a baremetal server"""
-    _power_action(ctx, baremetal_id, "start_metal", "Starting")
+    _power_action(ctx, baremetal_id, "start_metal", "Starting", json_output)
 
 @power_app.command("stop")
 def power_stop(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Stop a baremetal server"""
-    _power_action(ctx, baremetal_id, "stop_metal", "Stopping")
+    _power_action(ctx, baremetal_id, "stop_metal", "Stopping", json_output)
 
 @power_app.command("restart")
 def power_restart(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Restart a baremetal server"""
-    _power_action(ctx, baremetal_id, "restart_metal", "Restarting")
+    _power_action(ctx, baremetal_id, "restart_metal", "Restarting", json_output)
 
-def _power_action(ctx: typer.Context, baremetal_id: int, action: str, verb: str):
+def _power_action(ctx: typer.Context, baremetal_id: int, action: str, verb: str, json_output: bool = False):
     """Common power action handler"""
     api_token = get_context_value(ctx, "api_token")
 
@@ -501,6 +506,7 @@ def reinstall_start(
     password: str = typer.Option(..., "--password", help="Password"),
     disk_layout: Optional[str] = typer.Option(None, "--disk-layout", help="Disk layout name"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Start OS reinstallation on a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
@@ -556,6 +562,7 @@ def reinstall_start(
 def reinstall_status(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Check reinstallation status"""
     api_token = get_context_value(ctx, "api_token")
@@ -595,6 +602,7 @@ def reinstall_status(
 def rescue(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Enable rescue mode on a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
@@ -637,6 +645,7 @@ def reset_bmc(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Reset the BMC (Baseboard Management Controller)"""
     api_token = get_context_value(ctx, "api_token")
@@ -672,6 +681,7 @@ def update(
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
     hostname: Optional[str] = typer.Option(None, "--hostname", help="New hostname"),
     tags: Optional[str] = typer.Option(None, "--tags", help="New tags"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Update baremetal server details (hostname and/or tags)"""
     api_token = get_context_value(ctx, "api_token")
@@ -709,6 +719,7 @@ def update(
 def monitoring_enable(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Enable monitoring for a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
@@ -736,6 +747,7 @@ def monitoring_enable(
 def monitoring_disable(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Disable monitoring for a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
@@ -763,6 +775,7 @@ def monitoring_disable(
 def monitoring_status(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Check monitoring status for a baremetal server"""
     api_token = get_context_value(ctx, "api_token")
@@ -819,6 +832,7 @@ def monitoring_status(
 def ipmi(
     ctx: typer.Context,
     baremetal_id: int = typer.Argument(..., help="Baremetal server ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """Get IPMI console access credentials"""
     api_token = get_context_value(ctx, "api_token")
@@ -865,6 +879,7 @@ def list_models(
     ctx: typer.Context,
     in_stock: bool = typer.Option(False, "--in-stock", help="Show only models with stock available"),
     out_of_stock: bool = typer.Option(False, "--out-of-stock", help="Show only models out of stock"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """List available baremetal models with pricing by location"""
     api_token = get_context_value(ctx, "api_token")

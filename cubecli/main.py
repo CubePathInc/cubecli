@@ -2,7 +2,7 @@ import typer
 from typing import Optional
 from rich.console import Console
 
-from cubecli.commands import config, ssh_key, project, network, vps, location, floating_ip, baremetal, ddos_attack
+from cubecli.commands import config, ssh_key, project, network, vps, location, floating_ip, baremetal, ddos_attack, dns, loadbalancer, cdn
 from cubecli.commands.update import update_cubecli
 from cubecli.config import load_config, ConfigError
 from cubecli.utils import print_error
@@ -28,6 +28,9 @@ app.add_typer(baremetal.app, name="baremetal", help="Manage baremetal servers")
 app.add_typer(location.app, name="location", help="List available locations")
 app.add_typer(floating_ip.app, name="floating-ip", help="Manage floating IPs")
 app.add_typer(ddos_attack.app, name="ddos-attack", help="View DDoS attack history")
+app.add_typer(dns.app, name="dns", help="Manage DNS zones and records")
+app.add_typer(loadbalancer.app, name="lb", help="Manage load balancers")
+app.add_typer(cdn.app, name="cdn", help="Manage CDN zones and distribution")
 app.command(name="update", help="Update cubecli to the latest version")(update_cubecli)
 
 @app.callback()

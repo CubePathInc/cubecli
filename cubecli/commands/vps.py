@@ -26,6 +26,14 @@ app.add_typer(plan_app, name="plan", help="VPS plan information")
 template_app = typer.Typer(no_args_is_help=True)
 app.add_typer(template_app, name="template", help="VPS template information")
 
+# Backup subcommand
+backup_app = typer.Typer(no_args_is_help=True)
+app.add_typer(backup_app, name="backup", help="VPS backup management")
+
+# ISO subcommand
+iso_app = typer.Typer(no_args_is_help=True)
+app.add_typer(iso_app, name="iso", help="Mount/unmount ISO images")
+
 @app.command()
 def create(
     ctx: typer.Context,
@@ -366,38 +374,82 @@ def show(
 def destroy(
     ctx: typer.Context,
     vps_id: int = typer.Argument(..., help="VPS ID to destroy"),
+    release_ips: bool = typer.Option(True, "--release-ips/--keep-ips", help="Release floating IPs back to pool or keep them"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
 ):
     """Destroy a VPS"""
     api_token = get_context_value(ctx, "api_token")
-    
+
     if not api_token:
         print_error("No API token configured")
         raise typer.Exit(1)
-    
+
     if not force:
-        if not confirm_action(f"Are you sure you want to destroy VPS {vps_id}? This action cannot be undone."):
+        ip_msg = "Floating IPs will be released." if release_ips else "Floating IPs will be kept."
+        if not confirm_action(f"Are you sure you want to destroy VPS {vps_id}? {ip_msg} This action cannot be undone."):
             print_error("Operation cancelled")
             return
-    
+
     client = APIClient(api_token)
-    
+
     with with_spinner("Destroying VPS...") as progress:
         task = progress.add_task("Destroying VPS...", total=None)
         try:
-            response = client.post(f"/vps/destroy/{vps_id}")
+            response = client.post(f"/vps/destroy/{vps_id}", {"release_ips": release_ips})
             progress.update(task, completed=True)
         except Exception as e:
             handle_api_exception(e, progress)
-    
+
     if json_output:
         print_json(response)
     else:
         print_success(f"VPS {vps_id} destruction initiated!")
+        if not release_ips:
+            print_success("Floating IPs have been kept in your account.")
         if "task_id" in response:
             print_success(f"Task ID: {response['task_id']}")
+
+@app.command()
+def update(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID to update"),
+    label: Optional[str] = typer.Option(None, "--label", help="New VPS label"),
+    name: Optional[str] = typer.Option(None, "--name", "-n", help="New VPS hostname"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Update VPS details (label and/or hostname)"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    if not label and not name:
+        print_error("At least one of --label or --name must be provided")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    data = {}
+    if label:
+        data["label"] = label
+    if name:
+        data["name"] = name
+
+    with with_spinner("Updating VPS...") as progress:
+        task = progress.add_task("Updating VPS...", total=None)
+        try:
+            response = client.patch(f"/vps/update/{vps_id}", data)
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        print_success(f"VPS {vps_id} updated successfully!")
 
 @power_app.command("start")
 def power_start(
@@ -724,3 +776,388 @@ def template_list(
 
         console.print(table)
         console.print()
+
+
+# ── Backup commands ────────────────────────────────────────────
+
+@backup_app.command("list")
+def backup_list(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """List all backups for a VPS"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    with with_spinner("Fetching backups...") as progress:
+        task = progress.add_task("Fetching backups...", total=None)
+        try:
+            response = client.get(f"/vps/{vps_id}/backups")
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        backups = response.get("backups", [])
+
+        if not backups:
+            print_error("No backups found")
+            return
+
+        console.print()
+        table = create_table("Backups", ["ID", "Type", "Status", "Progress", "Size", "Notes", "Created"])
+
+        for backup in backups:
+            size = backup.get("size_gb")
+            size_str = f"{size:.2f} GB" if size else "-"
+            progress_val = backup.get("progress", 0)
+            progress_str = f"{progress_val}%" if backup.get("status") == "in_progress" else "-"
+            created = backup.get("created_at", "N/A")
+            if isinstance(created, str) and "T" in created:
+                created = created.split("T")[0]
+
+            table.add_row(
+                str(backup.get("id", "N/A")),
+                backup.get("backup_type", "N/A"),
+                _format_backup_status(backup.get("status", "unknown")),
+                progress_str,
+                size_str,
+                backup.get("notes", "-") or "-",
+                created,
+            )
+
+        console.print(table)
+
+        # Show settings summary
+        settings = response.get("settings")
+        if settings:
+            enabled = settings.get("enabled", False)
+            console.print()
+            if enabled:
+                console.print(f"[green]Auto-backup enabled[/green] — Schedule: {settings.get('schedule_hour', 0):02d}:00 UTC, Retention: {settings.get('retention_days', 7)} days, Max: {settings.get('max_backups', 3)}")
+            else:
+                console.print("[dim]Auto-backup disabled[/dim]")
+
+
+@backup_app.command("create")
+def backup_create(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID"),
+    notes: Optional[str] = typer.Option(None, "--notes", "-n", help="Backup notes (max 500 chars)"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Create a manual backup"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    data = {"notes": notes} if notes else {"notes": None}
+
+    with with_spinner("Creating backup...") as progress:
+        task = progress.add_task("Creating backup...", total=None)
+        try:
+            response = client.post(f"/vps/{vps_id}/backups", data)
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        print_success(f"Backup created for VPS {vps_id}!")
+        backup_id = response.get("id")
+        if backup_id:
+            print_success(f"Backup ID: {backup_id}")
+
+
+@backup_app.command("restore")
+def backup_restore(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID"),
+    backup_id: int = typer.Argument(..., help="Backup ID to restore"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Restore a VPS from a backup"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    if not force:
+        if not confirm_action(f"Restore VPS {vps_id} from backup {backup_id}? Current data will be overwritten!"):
+            print_error("Operation cancelled")
+            return
+
+    client = APIClient(api_token)
+
+    with with_spinner("Restoring from backup...") as progress:
+        task = progress.add_task("Restoring from backup...", total=None)
+        try:
+            response = client.post(f"/vps/{vps_id}/backups/{backup_id}/restore", {"confirm": True})
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        print_success(f"Restore initiated from backup {backup_id}!")
+
+
+@backup_app.command("delete")
+def backup_delete(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID"),
+    backup_id: int = typer.Argument(..., help="Backup ID to delete"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Delete a backup"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    if not force:
+        if not confirm_action(f"Delete backup {backup_id}? This cannot be undone."):
+            print_error("Operation cancelled")
+            return
+
+    client = APIClient(api_token)
+
+    with with_spinner("Deleting backup...") as progress:
+        task = progress.add_task("Deleting backup...", total=None)
+        try:
+            response = client.delete(f"/vps/{vps_id}/backups/{backup_id}")
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        print_success(f"Backup {backup_id} deleted!")
+
+
+@backup_app.command("settings")
+def backup_settings(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Show backup settings for a VPS"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    with with_spinner("Fetching backup settings...") as progress:
+        task = progress.add_task("Fetching backup settings...", total=None)
+        try:
+            response = client.get(f"/vps/{vps_id}/backup/settings")
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        console.print()
+        table = Table(title="Backup Settings", show_header=False, box=box.ROUNDED, show_lines=True, title_style="bold green")
+        table.add_column("Property", style="bold")
+        table.add_column("Value")
+
+        enabled = response.get("enabled", False)
+        table.add_row("Enabled", "[green]Yes[/green]" if enabled else "[red]No[/red]")
+        table.add_row("Schedule", f"{response.get('schedule_hour', 0):02d}:00 UTC")
+        table.add_row("Retention", f"{response.get('retention_days', 7)} days")
+        table.add_row("Max Backups", str(response.get("max_backups", 3)))
+
+        console.print(table)
+
+
+@backup_app.command("configure")
+def backup_configure(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID"),
+    enabled: bool = typer.Option(..., "--enable/--disable", help="Enable or disable auto-backups"),
+    schedule_hour: int = typer.Option(3, "--hour", help="Hour to run backups (0-23 UTC)"),
+    retention_days: int = typer.Option(7, "--retention", help="Days to keep backups (1-7)"),
+    max_backups: int = typer.Option(3, "--max", help="Maximum number of backups (1-10)"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Configure automatic backup settings"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    data = {
+        "enabled": enabled,
+        "schedule_hour": schedule_hour,
+        "retention_days": retention_days,
+        "max_backups": max_backups,
+    }
+
+    with with_spinner("Updating backup settings...") as progress:
+        task = progress.add_task("Updating backup settings...", total=None)
+        try:
+            response = client.put(f"/vps/{vps_id}/backup/settings", data)
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        if enabled:
+            print_success(f"Auto-backups enabled for VPS {vps_id} — {schedule_hour:02d}:00 UTC, {retention_days} days retention, max {max_backups}")
+        else:
+            print_success(f"Auto-backups disabled for VPS {vps_id}")
+
+
+# ── ISO commands ───────────────────────────────────────────────
+
+@iso_app.command("list")
+def iso_list(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """List available ISOs for a VPS"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    with with_spinner("Fetching ISOs...") as progress:
+        task = progress.add_task("Fetching ISOs...", total=None)
+        try:
+            response = client.get(f"/vps/{vps_id}/isos")
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        items = response.get("items", [])
+        mounted_id = response.get("mounted_iso_id")
+
+        if not items:
+            print_error("No ISOs available")
+            return
+
+        console.print()
+        table = create_table("Available ISOs", ["ID", "Name", "Size", "Status"])
+
+        for iso in items:
+            is_mounted = iso.get("is_mounted", False)
+            status_str = "[green]Mounted[/green]" if is_mounted else "[dim]Available[/dim]"
+            size = iso.get("file_size", 0)
+            size_str = f"{size / (1024**3):.1f} GB" if size > 0 else "-"
+
+            table.add_row(
+                iso.get("id", "N/A"),
+                iso.get("name", "N/A"),
+                size_str,
+                status_str,
+            )
+
+        console.print(table)
+
+
+@iso_app.command("mount")
+def iso_mount(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID"),
+    iso_id: str = typer.Argument(..., help="ISO UUID to mount"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Mount an ISO image to a VPS"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    with with_spinner("Mounting ISO...") as progress:
+        task = progress.add_task("Mounting ISO...", total=None)
+        try:
+            response = client.post(f"/vps/{vps_id}/iso", {"iso_id": iso_id})
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        iso_name = response.get("iso_name", iso_id)
+        print_success(f"ISO '{iso_name}' mounted on VPS {vps_id}!")
+
+
+@iso_app.command("unmount")
+def iso_unmount(
+    ctx: typer.Context,
+    vps_id: int = typer.Argument(..., help="VPS ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Unmount the current ISO from a VPS"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    with with_spinner("Unmounting ISO...") as progress:
+        task = progress.add_task("Unmounting ISO...", total=None)
+        try:
+            response = client.delete(f"/vps/{vps_id}/iso")
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        print_success(f"ISO unmounted from VPS {vps_id}!")
+
+
+def _format_backup_status(status: str) -> str:
+    colors = {
+        "completed": "green",
+        "in_progress": "yellow",
+        "pending": "dim",
+        "failed": "red",
+        "deleted": "dim",
+    }
+    color = colors.get(status.lower(), "white")
+    return f"[{color}]{status}[/{color}]"

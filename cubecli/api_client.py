@@ -42,14 +42,20 @@ class APIClient:
             )
             return self._handle_response(response)
     
-    def post(self, path: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def post(self, path: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """POST request"""
         with httpx.Client() as client:
+            kwargs = {
+                "headers": self.headers,
+                "timeout": 30.0,
+            }
+            if params:
+                kwargs["params"] = params
+            if data:
+                kwargs["json"] = data
             response = client.post(
                 f"{self.base_url}{path}",
-                headers=self.headers,
-                json=data or {},
-                timeout=30.0
+                **kwargs
             )
             return self._handle_response(response)
     

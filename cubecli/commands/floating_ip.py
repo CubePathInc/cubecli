@@ -34,7 +34,6 @@ def list_floating_ips(
     with with_spinner("Fetching floating IPs...") as progress:
         task = progress.add_task("Fetching floating IPs...", total=None)
         try:
-            # Use the dedicated floating IPs endpoint for more details
             response = client.get("/floating_ips/organization")
             progress.update(task, completed=True)
         except Exception as e:
@@ -97,9 +96,9 @@ def list_floating_ips(
 
         # Define columns based on verbose flag
         if verbose:
-            columns = ["IP Address", "Type", "Status", "Server Type", "Assigned To", "DDoS Protection", "Location"]
+            columns = ["IP Address", "Type", "Role", "Status", "Server Type", "Assigned To", "DDoS Protection", "Location"]
         else:
-            columns = ["IP Address", "Status", "Assigned To", "Location"]
+            columns = ["IP Address", "Role", "Status", "Assigned To", "Location"]
 
         table = create_table("Floating IPs", columns)
 
@@ -108,6 +107,15 @@ def list_floating_ips(
             protection = ip.get("protection_type", "N/A")
             if protection and protection != "N/A":
                 protection = protection.replace("AntiDDos_", "").replace("_", " ")
+
+            # Primary or Secondary
+            is_primary = ip.get("is_primary")
+            if is_primary is True:
+                role = "[green]Primary[/green]"
+            elif is_primary is False:
+                role = "[dim]Secondary[/dim]"
+            else:
+                role = "-"
 
             # Get assigned server (VPS or Baremetal)
             assigned_to = "-"
@@ -126,6 +134,7 @@ def list_floating_ips(
                 table.add_row(
                     ip["address"],
                     ip["ip_type"],
+                    role,
                     ip["status"],
                     server_type,
                     assigned_to,
@@ -135,9 +144,198 @@ def list_floating_ips(
             else:
                 table.add_row(
                     ip["address"],
+                    role,
                     ip["status"],
                     assigned_to,
                     ip.get("location_name", "N/A")
                 )
 
         console.print(table)
+
+@app.command()
+def acquire(
+    ctx: typer.Context,
+    ip_type: str = typer.Option("IPv4", "--type", "-t", help="IP type: IPv4 or IPv6"),
+    location: str = typer.Option(..., "--location", "-l", help="Location name (e.g., us-mia-1)"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Acquire a new floating IP from the pool"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    # Normalize to API expected format
+    ip_type_map = {"ipv4": "IPv4", "ipv6": "IPv6", "ipv4": "IPv4", "ipv6": "IPv6"}
+    normalized = ip_type_map.get(ip_type.lower())
+    if not normalized:
+        print_error("Invalid IP type. Use 'IPv4' or 'IPv6'")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    with with_spinner("Acquiring floating IP...") as progress:
+        task = progress.add_task("Acquiring floating IP...", total=None)
+        try:
+            response = client.post(
+                "/floating_ips/acquire",
+                params={"ip_type": normalized, "location_name": location}
+            )
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        address = response.get("address", "N/A")
+        print_success(f"Floating IP acquired: {address}")
+
+@app.command()
+def release(
+    ctx: typer.Context,
+    address: str = typer.Argument(..., help="IP address to release"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Release a floating IP back to the pool"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    if not force:
+        if not confirm_action(f"Release floating IP {address}? It will be returned to the pool."):
+            print_error("Operation cancelled")
+            return
+
+    client = APIClient(api_token)
+
+    with with_spinner("Releasing floating IP...") as progress:
+        task = progress.add_task("Releasing floating IP...", total=None)
+        try:
+            response = client.post(f"/floating_ips/release/{address}")
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        print_success(f"Floating IP {address} released successfully!")
+
+@app.command()
+def assign(
+    ctx: typer.Context,
+    address: str = typer.Argument(..., help="Floating IP address to assign"),
+    vps_id: Optional[int] = typer.Option(None, "--vps", help="VPS ID to assign the IP to"),
+    baremetal_id: Optional[int] = typer.Option(None, "--baremetal", help="Baremetal server ID to assign the IP to"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Assign a floating IP to a VPS or baremetal server"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    if not vps_id and not baremetal_id:
+        print_error("You must specify either --vps or --baremetal")
+        raise typer.Exit(1)
+
+    if vps_id and baremetal_id:
+        print_error("You can only assign to one target: --vps or --baremetal")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    if vps_id:
+        endpoint = f"/floating_ips/assign/vps/{vps_id}"
+        target = f"VPS {vps_id}"
+    else:
+        endpoint = f"/floating_ips/assign/baremetal/{baremetal_id}"
+        target = f"Baremetal {baremetal_id}"
+
+    with with_spinner(f"Assigning {address} to {target}...") as progress:
+        task = progress.add_task(f"Assigning {address} to {target}...", total=None)
+        try:
+            response = client.post(endpoint, params={"address": address})
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        print_success(f"Floating IP {address} assigned to {target}!")
+
+@app.command()
+def unassign(
+    ctx: typer.Context,
+    address: str = typer.Argument(..., help="Floating IP address to unassign"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Unassign a floating IP from its current server"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    if not force:
+        if not confirm_action(f"Unassign floating IP {address} from its current server?"):
+            print_error("Operation cancelled")
+            return
+
+    client = APIClient(api_token)
+
+    with with_spinner("Unassigning floating IP...") as progress:
+        task = progress.add_task("Unassigning floating IP...", total=None)
+        try:
+            response = client.post(f"/floating_ips/unassign/{address}")
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        print_success(f"Floating IP {address} unassigned successfully!")
+
+@app.command("reverse-dns")
+def reverse_dns(
+    ctx: typer.Context,
+    ip: str = typer.Argument(..., help="Floating IP address"),
+    hostname: str = typer.Option("", "--hostname", "-r", help="Reverse DNS hostname (leave empty to delete)"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
+):
+    """Configure reverse DNS (PTR record) for a floating IP"""
+    api_token = get_context_value(ctx, "api_token")
+
+    if not api_token:
+        print_error("No API token configured")
+        raise typer.Exit(1)
+
+    client = APIClient(api_token)
+
+    with with_spinner("Configuring reverse DNS...") as progress:
+        task = progress.add_task("Configuring reverse DNS...", total=None)
+        try:
+            response = client.post(
+                "/floating_ips/reverse_dns/configure",
+                params={"ip": ip, "reverse_dns": hostname}
+            )
+            progress.update(task, completed=True)
+        except Exception as e:
+            handle_api_exception(e, progress)
+
+    if json_output:
+        print_json(response)
+    else:
+        if hostname:
+            print_success(f"Reverse DNS for {ip} set to {hostname}")
+        else:
+            print_success(f"Reverse DNS for {ip} removed")
