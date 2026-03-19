@@ -1,0 +1,5 @@
+cubecli
+cubecli.exe
+dist/
+*.tar.gz
+*.zip
