@@ -9,6 +9,7 @@ import (
 	"github.com/CubePathInc/cubecli/cmd/ddosattack"
 	"github.com/CubePathInc/cubecli/cmd/dns"
 	"github.com/CubePathInc/cubecli/cmd/floatingip"
+	"github.com/CubePathInc/cubecli/cmd/kubernetes"
 	"github.com/CubePathInc/cubecli/cmd/lb"
 	"github.com/CubePathInc/cubecli/cmd/location"
 	"github.com/CubePathInc/cubecli/cmd/network"
@@ -73,5 +74,6 @@ func init() {
 		dns.NewCmd(),
 		lb.NewCmd(),
 		cdn.NewCmd(),
+		kubernetes.NewCmd(),
 	)
 }
