@@ -12,10 +12,18 @@ import (
 
 type contextKey string
 
-const ClientKey contextKey = "api-client"
+const (
+	ClientKey        contextKey = "api-client"
+	ActiveProfileKey contextKey = "active-profile"
+)
 
 func GetClient(cmd *cobra.Command) *api.Client {
 	return cmd.Context().Value(ClientKey).(*api.Client)
+}
+
+func GetActiveProfileName(cmd *cobra.Command) string {
+	v, _ := cmd.Context().Value(ActiveProfileKey).(string)
+	return v
 }
 
 func IsJSON(cmd *cobra.Command) bool {

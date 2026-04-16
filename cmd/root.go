@@ -13,6 +13,7 @@ import (
 	"github.com/CubePathInc/cubecli/cmd/lb"
 	"github.com/CubePathInc/cubecli/cmd/location"
 	"github.com/CubePathInc/cubecli/cmd/network"
+	"github.com/CubePathInc/cubecli/cmd/profile"
 	"github.com/CubePathInc/cubecli/cmd/project"
 	"github.com/CubePathInc/cubecli/cmd/sshkey"
 	"github.com/CubePathInc/cubecli/cmd/vps"
@@ -36,17 +37,22 @@ var rootCmd = &cobra.Command{
 
 		// Skip auth for commands that don't need it
 		switch rootName {
-		case "config", "version", "update", "completion", "help", "cubecli":
+		case "config", "profile", "version", "update", "completion", "help", "cubecli":
 			return nil
 		}
 
-		cfg, err := internalConfig.Load()
+		cfg := internalConfig.LoadOrEmpty()
+		explicit, _ := cmd.Flags().GetString("profile")
+		p, name, err := cfg.ActiveProfile(explicit)
 		if err != nil {
 			return err
 		}
 
-		client := api.NewClient(internalConfig.APIURL(), cfg.APIToken)
-		cmd.SetContext(context.WithValue(cmd.Context(), cmdutil.ClientKey, client))
+		client := api.NewClient(internalConfig.APIURL(p), p.APIToken)
+		ctx := cmd.Context()
+		ctx = context.WithValue(ctx, cmdutil.ClientKey, client)
+		ctx = context.WithValue(ctx, cmdutil.ActiveProfileKey, name)
+		cmd.SetContext(ctx)
 		return nil
 	},
 	SilenceUsage:  true,
@@ -60,9 +66,11 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().Bool("json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
+	rootCmd.PersistentFlags().String("profile", "", "Profile to use (overrides CUBE_PROFILE and current profile)")
 
 	rootCmd.AddCommand(
 		configcmd.NewCmd(),
+		profile.NewCmd(),
 		sshkey.NewCmd(),
 		project.NewCmd(),
 		network.NewCmd(),

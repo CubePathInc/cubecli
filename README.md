@@ -51,10 +51,10 @@ cubecli <command> --help
 CubeCLI reads credentials from (in order):
 
 1. `CUBE_API_TOKEN` environment variable
-2. `~/.cubecli/config.json` config file
+2. Active profile in `~/.cubecli/config.json`
 
 ```bash
-# Set up interactively (validates the token)
+# Set up interactively (validates the token) — creates the 'default' profile
 cubecli config setup
 
 # Or use an environment variable
@@ -63,6 +63,38 @@ export CUBE_API_TOKEN="your-api-token"
 # Optionally override the API URL
 export CUBE_API_URL="https://api.cubepath.com"
 ```
+
+## Profiles (multiple accounts)
+
+Store multiple API tokens and switch between them — useful for managing a
+personal account and a work account from the same shell.
+
+```bash
+# Add a new profile (prompts for the token and validates it)
+cubecli profile add work
+
+# List configured profiles (active marked with *)
+cubecli profile list
+
+# Switch the active profile
+cubecli profile use work
+
+# Show the active profile
+cubecli profile current
+
+# Override per invocation without changing the active profile
+cubecli --profile personal vps list
+CUBE_PROFILE=personal cubecli vps list
+
+# Remove a profile
+cubecli profile delete work
+
+# Rename a profile
+cubecli profile rename work corp
+```
+
+Legacy configs with a single `api_token` field are migrated automatically into
+a profile called `default` the first time you run CubeCLI.
 
 ## Commands
 
