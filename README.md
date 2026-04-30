@@ -73,6 +73,9 @@ personal account and a work account from the same shell.
 # Add a new profile (prompts for the token and validates it)
 cubecli profile add work
 
+# Point a profile at a different API URL (e.g. staging)
+cubecli profile add staging --api-url https://api.staging.cubepath.com
+
 # List configured profiles (active marked with *)
 cubecli profile list
 
@@ -179,7 +182,8 @@ a profile called `default` the first time you run CubeCLI.
 ## Global Flags
 
 ```
---json       Output in JSON format
+--json           Output in JSON format
+--profile        Profile to use (overrides CUBE_PROFILE and the active profile)
 -v, --verbose    Enable verbose output
 -h, --help       Help for any command
 ```
