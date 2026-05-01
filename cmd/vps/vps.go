@@ -29,7 +29,7 @@ func NewCmd() *cobra.Command {
 			template, _ := cmd.Flags().GetString("template")
 			projectID, _ := cmd.Flags().GetInt("project")
 			location, _ := cmd.Flags().GetString("location")
-			sshKeys, _ := cmd.Flags().GetStringSlice("ssh")
+			sshKeyIDs, _ := cmd.Flags().GetIntSlice("ssh")
 			networkID, _ := cmd.Flags().GetInt("network")
 			label, _ := cmd.Flags().GetString("label")
 			password, _ := cmd.Flags().GetString("password")
@@ -38,7 +38,7 @@ func NewCmd() *cobra.Command {
 			backups, _ := cmd.Flags().GetBool("backups")
 			cloudinit, _ := cmd.Flags().GetString("cloudinit")
 
-			if len(sshKeys) == 0 && password == "" {
+			if len(sshKeyIDs) == 0 && password == "" {
 				return fmt.Errorf("either --ssh or --password must be provided")
 			}
 
@@ -61,8 +61,8 @@ func NewCmd() *cobra.Command {
 			if label != "" {
 				body["label"] = label
 			}
-			if len(sshKeys) > 0 {
-				body["ssh_key_names"] = sshKeys
+			if len(sshKeyIDs) > 0 {
+				body["ssh_key_ids"] = sshKeyIDs
 			}
 			if networkID != 0 {
 				body["network_id"] = networkID
@@ -538,7 +538,7 @@ func NewCmd() *cobra.Command {
 	vpsCreateCmd.Flags().StringP("template", "t", "", "Template name")
 	vpsCreateCmd.Flags().Int("project", 0, "Project ID")
 	vpsCreateCmd.Flags().StringP("location", "l", "", "Location name")
-	vpsCreateCmd.Flags().StringSliceP("ssh", "s", nil, "SSH key names (repeatable)")
+	vpsCreateCmd.Flags().IntSliceP("ssh", "s", nil, "SSH key IDs (repeatable)")
 	vpsCreateCmd.Flags().Int("network", 0, "Network ID")
 	vpsCreateCmd.Flags().String("label", "", "VPS label")
 	vpsCreateCmd.Flags().String("password", "", "Root password")

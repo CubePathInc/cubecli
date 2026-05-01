@@ -32,7 +32,7 @@ func NewCmd() *cobra.Command {
 			label, _ := cmd.Flags().GetString("label")
 			osName, _ := cmd.Flags().GetString("os")
 			diskLayout, _ := cmd.Flags().GetString("disk-layout")
-			sshKeys, _ := cmd.Flags().GetStringSlice("ssh")
+			sshKeyIDs, _ := cmd.Flags().GetIntSlice("ssh")
 
 			body := map[string]interface{}{
 				"location_name": location,
@@ -50,8 +50,8 @@ func NewCmd() *cobra.Command {
 			if diskLayout != "" {
 				body["disk_layout_name"] = diskLayout
 			}
-			if len(sshKeys) > 0 {
-				body["ssh_key_names"] = sshKeys
+			if len(sshKeyIDs) > 0 {
+				body["ssh_key_ids"] = sshKeyIDs
 			}
 
 			s := output.NewSpinner("Deploying baremetal server...")
@@ -532,7 +532,7 @@ func NewCmd() *cobra.Command {
 	baremetalDeployCmd.Flags().String("label", "", "Optional label")
 	baremetalDeployCmd.Flags().String("os", "", "OS name")
 	baremetalDeployCmd.Flags().String("disk-layout", "", "Disk layout name")
-	baremetalDeployCmd.Flags().StringSliceP("ssh", "s", nil, "SSH key names")
+	baremetalDeployCmd.Flags().IntSliceP("ssh", "s", nil, "SSH key IDs")
 	baremetalDeployCmd.MarkFlagRequired("project")
 	baremetalDeployCmd.MarkFlagRequired("location")
 	baremetalDeployCmd.MarkFlagRequired("model")
