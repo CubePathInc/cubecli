@@ -34,6 +34,15 @@ func NewCmd() *cobra.Command {
 			label, _ := cmd.Flags().GetString("label")
 			password, _ := cmd.Flags().GetString("password")
 			ipv4, _ := cmd.Flags().GetBool("ipv4")
+			noIPv4, _ := cmd.Flags().GetBool("no-ipv4")
+			if noIPv4 {
+				ipv4 = false
+			}
+			ipv6, _ := cmd.Flags().GetBool("ipv6")
+			noIPv6, _ := cmd.Flags().GetBool("no-ipv6")
+			if noIPv6 {
+				ipv6 = false
+			}
 			firewalls, _ := cmd.Flags().GetIntSlice("firewall")
 			backups, _ := cmd.Flags().GetBool("backups")
 			cloudinit, _ := cmd.Flags().GetString("cloudinit")
@@ -56,6 +65,7 @@ func NewCmd() *cobra.Command {
 				"template_name":  template,
 				"location_name":  location,
 				"ipv4":           ipv4,
+				"ipv6":           ipv6,
 				"enable_backups": backups,
 			}
 			if label != "" {
@@ -544,6 +554,8 @@ func NewCmd() *cobra.Command {
 	vpsCreateCmd.Flags().String("password", "", "Root password")
 	vpsCreateCmd.Flags().Bool("ipv4", true, "Enable IPv4")
 	vpsCreateCmd.Flags().Bool("no-ipv4", false, "Disable IPv4")
+	vpsCreateCmd.Flags().Bool("ipv6", true, "Enable public IPv6")
+	vpsCreateCmd.Flags().Bool("no-ipv6", false, "Disable public IPv6 (requires --network)")
 	vpsCreateCmd.Flags().IntSlice("firewall", nil, "Firewall group IDs (repeatable)")
 	vpsCreateCmd.Flags().Bool("backups", false, "Enable backups")
 	vpsCreateCmd.Flags().Bool("no-backups", false, "Disable backups")
