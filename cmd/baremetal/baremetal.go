@@ -116,13 +116,16 @@ func NewCmd() *cobra.Command {
 					Location         struct {
 						LocationName string `json:"location_name"`
 					} `json:"location"`
+					Network struct {
+						AssignedIP string `json:"assigned_ip"`
+					} `json:"network"`
 				} `json:"baremetals"`
 			}
 			if err := json.Unmarshal(resp, &projects); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("Baremetal Servers", []string{"ID", "Hostname", "Project", "Status", "IP", "Model", "OS", "Monitoring", "Location"})
+			t := output.NewTable("Baremetal Servers", []string{"ID", "Hostname", "Project", "Status", "Public IPs", "Private IP", "Model", "OS", "Monitoring", "Location"})
 			for _, p := range projects {
 				if filterProject > 0 && p.Project.ID != filterProject {
 					continue
@@ -135,16 +138,19 @@ func NewCmd() *cobra.Command {
 					if bm.MonitoringEnable {
 						monitoring = "enabled"
 					}
-					var ips []string
+					var publicIPs []string
 					for _, fip := range bm.FloatingIPs {
-						ips = append(ips, fip.Address)
+						if fip.Type == "IPv4" || fip.Type == "IPv6" {
+							publicIPs = append(publicIPs, fip.Address)
+						}
 					}
 					t.AddRow(
 						strconv.Itoa(bm.ID),
 						bm.Hostname,
 						p.Project.Name,
 						output.FormatStatus(bm.Status),
-						strings.Join(ips, ", "),
+						strings.Join(publicIPs, ", "),
+						bm.Network.AssignedIP,
 						bm.BaremetalModel.ModelName,
 						bm.OS.Name,
 						output.FormatStatus(monitoring),

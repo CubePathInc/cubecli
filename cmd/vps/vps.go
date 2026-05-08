@@ -144,6 +144,7 @@ func NewCmd() *cobra.Command {
 					FloatingIPs struct {
 						List []struct {
 							Address string `json:"address"`
+							Type    string `json:"type"`
 						} `json:"list"`
 					} `json:"floating_ips"`
 					Plan struct {
@@ -156,13 +157,16 @@ func NewCmd() *cobra.Command {
 					Location struct {
 						Name string `json:"location_name"`
 					} `json:"location"`
+					Network struct {
+						AssignedIP string `json:"assigned_ip"`
+					} `json:"network"`
 				} `json:"vps"`
 			}
 			if err := json.Unmarshal(resp, &projects); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("VPS Instances", []string{"ID", "Name", "Project", "Status", "IP", "Plan", "OS", "Location"})
+			t := output.NewTable("VPS Instances", []string{"ID", "Name", "Project", "Status", "Public IPs", "Private IP", "Plan", "OS", "Location"})
 			for _, p := range projects {
 				if projectFilter != 0 && p.Project.ID != projectFilter {
 					continue
@@ -171,16 +175,19 @@ func NewCmd() *cobra.Command {
 					if locationFilter != "" && v.Location.Name != locationFilter {
 						continue
 					}
-					ip := ""
-					if len(v.FloatingIPs.List) > 0 {
-						ip = v.FloatingIPs.List[0].Address
+					var publicIPs []string
+					for _, f := range v.FloatingIPs.List {
+						if f.Type == "IPv4" || f.Type == "IPv6" {
+							publicIPs = append(publicIPs, f.Address)
+						}
 					}
 					t.AddRow(
 						strconv.Itoa(v.ID),
 						v.Name,
 						p.Project.Name,
 						output.FormatStatus(v.Status),
-						ip,
+						strings.Join(publicIPs, ", "),
+						v.Network.AssignedIP,
 						v.Plan.Name,
 						v.Template.OSName,
 						v.Location.Name,
