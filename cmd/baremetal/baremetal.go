@@ -138,11 +138,19 @@ func NewCmd() *cobra.Command {
 					if bm.MonitoringEnable {
 						monitoring = "enabled"
 					}
-					var publicIPs []string
+					var ipv4s, ipv6s []string
 					for _, fip := range bm.FloatingIPs {
-						if fip.Type == "IPv4" || fip.Type == "IPv6" {
-							publicIPs = append(publicIPs, fip.Address)
+						switch fip.Type {
+						case "IPv4":
+							ipv4s = append(ipv4s, fip.Address)
+						case "IPv6":
+							ipv6s = append(ipv6s, fip.Address)
 						}
+					}
+					publicIPs := append(ipv4s, ipv6s...)
+					privateIP := bm.Network.AssignedIP
+					if i := strings.Index(privateIP, "/"); i >= 0 {
+						privateIP = privateIP[:i]
 					}
 					t.AddRow(
 						strconv.Itoa(bm.ID),
@@ -150,7 +158,7 @@ func NewCmd() *cobra.Command {
 						p.Project.Name,
 						output.FormatStatus(bm.Status),
 						strings.Join(publicIPs, ", "),
-						bm.Network.AssignedIP,
+						privateIP,
 						bm.BaremetalModel.ModelName,
 						bm.OS.Name,
 						output.FormatStatus(monitoring),

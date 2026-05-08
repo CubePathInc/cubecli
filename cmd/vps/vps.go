@@ -141,6 +141,7 @@ func NewCmd() *cobra.Command {
 					ID          int    `json:"id"`
 					Name        string `json:"name"`
 					Status      string `json:"status"`
+					Protected   bool   `json:"protected"`
 					FloatingIPs struct {
 						List []struct {
 							Address string `json:"address"`
@@ -166,7 +167,7 @@ func NewCmd() *cobra.Command {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("VPS Instances", []string{"ID", "Name", "Project", "Status", "Public IPs", "Private IP", "Plan", "OS", "Location"})
+			t := output.NewTable("VPS Instances", []string{"ID", "Name", "Project", "Status", "Protection", "Public IPs", "Private IP", "Plan", "OS", "Location"})
 			for _, p := range projects {
 				if projectFilter != 0 && p.Project.ID != projectFilter {
 					continue
@@ -175,17 +176,26 @@ func NewCmd() *cobra.Command {
 					if locationFilter != "" && v.Location.Name != locationFilter {
 						continue
 					}
-					var publicIPs []string
+					var ipv4s, ipv6s []string
 					for _, f := range v.FloatingIPs.List {
-						if f.Type == "IPv4" || f.Type == "IPv6" {
-							publicIPs = append(publicIPs, f.Address)
+						switch f.Type {
+						case "IPv4":
+							ipv4s = append(ipv4s, f.Address)
+						case "IPv6":
+							ipv6s = append(ipv6s, f.Address)
 						}
+					}
+					publicIPs := append(ipv4s, ipv6s...)
+					protection := "disabled"
+					if v.Protected {
+						protection = "enabled"
 					}
 					t.AddRow(
 						strconv.Itoa(v.ID),
 						v.Name,
 						p.Project.Name,
 						output.FormatStatus(v.Status),
+						output.FormatStatus(protection),
 						strings.Join(publicIPs, ", "),
 						v.Network.AssignedIP,
 						v.Plan.Name,
