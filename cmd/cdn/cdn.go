@@ -308,8 +308,75 @@ func NewCmd() *cobra.Command {
 	// Zone delete flags
 	zoneDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
+	zoneRequestSSLCmd := &cobra.Command{
+		Use:   "request-ssl <zone_uuid>",
+		Short: "Re-trigger automatic SSL issuance for the zone's custom domain",
+		Long: "Use after fixing a missing/incorrect CNAME on your custom domain. " +
+			"The initial PATCH zone flow only queues a cert task when " +
+			"custom_domain changes, so this is the way to retry without " +
+			"resetting the field.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := cmdutil.GetClient(cmd)
+			zoneUUID := args[0]
+
+			s := output.NewSpinner("Requesting SSL certificate...")
+			s.Start()
+			resp, err := client.Post(fmt.Sprintf("/cdn/zones/%s/request-ssl", zoneUUID), nil)
+			s.Stop()
+			if err != nil {
+				return err
+			}
+
+			if cmdutil.IsJSON(cmd) {
+				return output.PrintJSON(json.RawMessage(resp))
+			}
+
+			var r struct {
+				Detail string `json:"detail"`
+			}
+			_ = json.Unmarshal(resp, &r)
+			if r.Detail != "" {
+				output.PrintSuccess(r.Detail)
+			} else {
+				output.PrintSuccess("SSL issuance task queued")
+			}
+			return nil
+		},
+	}
+
+	zoneMoveProjectCmd := &cobra.Command{
+		Use:   "move-project <zone_uuid>",
+		Short: "Move a CDN zone to a different project in the same organization",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := cmdutil.GetClient(cmd)
+			zoneUUID := args[0]
+			projectID, _ := cmd.Flags().GetInt("project")
+
+			s := output.NewSpinner("Moving CDN zone...")
+			s.Start()
+			resp, err := client.Post(
+				fmt.Sprintf("/cdn/zones/%s/move-project", zoneUUID),
+				map[string]any{"project_id": projectID},
+			)
+			s.Stop()
+			if err != nil {
+				return err
+			}
+
+			if cmdutil.IsJSON(cmd) {
+				return output.PrintJSON(json.RawMessage(resp))
+			}
+			output.PrintSuccess(fmt.Sprintf("CDN zone moved to project %d", projectID))
+			return nil
+		},
+	}
+	zoneMoveProjectCmd.Flags().Int("project", 0, "Target project ID")
+	_ = zoneMoveProjectCmd.MarkFlagRequired("project")
+
 	// Build zone subcommand tree
-	zoneCmd.AddCommand(zoneListCmd, zoneShowCmd, zoneCreateCmd, zoneUpdateCmd, zoneDeleteCmd, zonePricingCmd)
+	zoneCmd.AddCommand(zoneListCmd, zoneShowCmd, zoneCreateCmd, zoneUpdateCmd, zoneDeleteCmd, zonePricingCmd, zoneRequestSSLCmd, zoneMoveProjectCmd)
 	cdnCmd.AddCommand(zoneCmd)
 
 	// Add sub-command groups
