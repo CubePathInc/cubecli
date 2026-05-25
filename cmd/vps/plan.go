@@ -23,7 +23,7 @@ func addPlanCmd(parent *cobra.Command) {
 
 			s := output.NewSpinner("Fetching plans...")
 			s.Start()
-			resp, err := client.Get("/pricing")
+			resp, err := client.Get("/vps/plans")
 			s.Stop()
 			if err != nil {
 				return err
@@ -34,20 +34,18 @@ func addPlanCmd(parent *cobra.Command) {
 			}
 
 			var pricing struct {
-				VPS struct {
-					Locations []struct {
-						Clusters []struct {
-							Plans []struct {
-								Name          string  `json:"plan_name"`
-								CPU           int     `json:"cpu"`
-								RAM           int     `json:"ram"`
-								Storage       int     `json:"storage"`
-								Bandwidth     int     `json:"bandwidth"`
-								PricePerHour  json.Number `json:"price_per_hour"`
-							} `json:"plans"`
-						} `json:"clusters"`
-					} `json:"locations"`
-				} `json:"vps"`
+				Locations []struct {
+					Clusters []struct {
+						Plans []struct {
+							Name          string  `json:"plan_name"`
+							CPU           int     `json:"cpu"`
+							RAM           int     `json:"ram"`
+							Storage       int     `json:"storage"`
+							Bandwidth     int     `json:"bandwidth"`
+							PricePerHour  json.Number `json:"price_per_hour"`
+						} `json:"plans"`
+					} `json:"clusters"`
+				} `json:"locations"`
 			}
 			if err := json.Unmarshal(resp, &pricing); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
@@ -56,7 +54,7 @@ func addPlanCmd(parent *cobra.Command) {
 			t := output.NewTable("VPS Plans", []string{"Plan", "vCPUs", "RAM", "Storage", "Bandwidth", "Price/Hour"})
 
 			seen := make(map[string]bool)
-			for _, loc := range pricing.VPS.Locations {
+			for _, loc := range pricing.Locations {
 				for _, cluster := range loc.Clusters {
 					for _, plan := range cluster.Plans {
 						if seen[plan.Name] {
