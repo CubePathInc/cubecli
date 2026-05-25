@@ -51,7 +51,7 @@ func addPlanCmd(parent *cobra.Command) {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("VPS Plans", []string{"Plan", "vCPUs", "RAM", "Storage", "Bandwidth", "Price/Hour"})
+			t := output.NewTable("VPS Plans", []string{"Plan", "vCPUs", "RAM", "Storage", "Bandwidth", "Price/Hour", "Price/Month"})
 
 			seen := make(map[string]bool)
 			for _, loc := range pricing.Locations {
@@ -61,6 +61,7 @@ func addPlanCmd(parent *cobra.Command) {
 							continue
 						}
 						seen[plan.Name] = true
+						hourly, _ := plan.PricePerHour.Float64()
 						t.AddRow(
 							plan.Name,
 							fmt.Sprintf("%d", plan.CPU),
@@ -68,6 +69,7 @@ func addPlanCmd(parent *cobra.Command) {
 							fmt.Sprintf("%d GB", plan.Storage),
 							fmt.Sprintf("%d GB", plan.Bandwidth),
 							fmt.Sprintf("$%s", plan.PricePerHour.String()),
+							fmt.Sprintf("$%.2f", hourly*24*30),
 						)
 					}
 				}
