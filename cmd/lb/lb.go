@@ -4,11 +4,34 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
 )
+
+// floatingIP mirrors an entry of the load balancer's "floating_ips" list.
+type floatingIP struct {
+	Address string `json:"address"`
+	Type    string `json:"type"`
+}
+
+// formatFloatingIPs joins the load balancer's floating IPs (IPv4 first) for display.
+func formatFloatingIPs(ips []floatingIP) string {
+	var v4, v6 []string
+	for _, ip := range ips {
+		if ip.Address == "" {
+			continue
+		}
+		if ip.Type == "IPv6" {
+			v6 = append(v6, ip.Address)
+		} else {
+			v4 = append(v4, ip.Address)
+		}
+	}
+	return strings.Join(append(v4, v6...), ", ")
+}
 
 func NewCmd() *cobra.Command {
 	lbCmd := &cobra.Command{
@@ -35,13 +58,13 @@ func NewCmd() *cobra.Command {
 			}
 
 			var lbs []struct {
-				UUID      string             `json:"uuid"`
-				Name      string             `json:"name"`
-				Status    string             `json:"status"`
-				Plan      string             `json:"plan_name"`
-				IP        string             `json:"floating_ip_address"`
-				Listeners []json.RawMessage   `json:"listeners"`
-				Location  string             `json:"location_name"`
+				UUID        string            `json:"uuid"`
+				Name        string            `json:"name"`
+				Status      string            `json:"status"`
+				Plan        string            `json:"plan_name"`
+				FloatingIPs []floatingIP      `json:"floating_ips"`
+				Listeners   []json.RawMessage `json:"listeners"`
+				Location    string            `json:"location_name"`
 			}
 			if err := json.Unmarshal(resp, &lbs); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
@@ -54,7 +77,7 @@ func NewCmd() *cobra.Command {
 					lb.Name,
 					output.FormatStatus(lb.Status),
 					lb.Plan,
-					lb.IP,
+					formatFloatingIPs(lb.FloatingIPs),
 					strconv.Itoa(len(lb.Listeners)),
 					lb.Location,
 				)
@@ -101,14 +124,14 @@ func NewCmd() *cobra.Command {
 			}
 
 			var lbs []struct {
-				UUID     string `json:"uuid"`
-				Name     string `json:"name"`
-				Status   string `json:"status"`
-				Plan     string `json:"plan_name"`
-				IP       string `json:"floating_ip_address"`
-				Location string `json:"location_name"`
-				Label    string `json:"label"`
-				Listeners []struct {
+				UUID        string       `json:"uuid"`
+				Name        string       `json:"name"`
+				Status      string       `json:"status"`
+				Plan        string       `json:"plan_name"`
+				FloatingIPs []floatingIP `json:"floating_ips"`
+				Location    string       `json:"location_name"`
+				Label       string       `json:"label"`
+				Listeners   []struct {
 					UUID           string `json:"uuid"`
 					Name           string `json:"name"`
 					Protocol       string `json:"protocol"`
@@ -123,7 +146,7 @@ func NewCmd() *cobra.Command {
 						TargetUUID string `json:"target_uuid"`
 						Port       int    `json:"port"`
 						Weight     int    `json:"weight"`
-						Status     string `json:"status"`
+						Status     string `json:"health_status"`
 						Enabled    bool   `json:"enabled"`
 					} `json:"targets"`
 				} `json:"listeners"`
@@ -145,7 +168,7 @@ func NewCmd() *cobra.Command {
 				info.AddRow("Name", lb.Name)
 				info.AddRow("Status", output.FormatStatus(lb.Status))
 				info.AddRow("Plan", lb.Plan)
-				info.AddRow("IP", lb.IP)
+				info.AddRow("IP", formatFloatingIPs(lb.FloatingIPs))
 				info.AddRow("Location", lb.Location)
 				if lb.Label != "" {
 					info.AddRow("Label", lb.Label)
