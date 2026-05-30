@@ -12,6 +12,7 @@ import (
 	"github.com/CubePathInc/cubecli/cmd/kubernetes"
 	"github.com/CubePathInc/cubecli/cmd/lb"
 	"github.com/CubePathInc/cubecli/cmd/location"
+	"github.com/CubePathInc/cubecli/cmd/natgateway"
 	"github.com/CubePathInc/cubecli/cmd/network"
 	"github.com/CubePathInc/cubecli/cmd/profile"
 	"github.com/CubePathInc/cubecli/cmd/project"
@@ -74,6 +75,7 @@ func init() {
 		sshkey.NewCmd(),
 		project.NewCmd(),
 		network.NewCmd(),
+		natgateway.NewCmd(),
 		location.NewCmd(),
 		vps.NewCmd(),
 		baremetal.NewCmd(),

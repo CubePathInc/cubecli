@@ -334,6 +334,8 @@ func createCmd() *cobra.Command {
 			location, _ := cmd.Flags().GetString("location")
 			version, _ := cmd.Flags().GetString("version")
 			ha, _ := cmd.Flags().GetBool("ha")
+			allocateIPv4, _ := cmd.Flags().GetBool("allocate-ipv4")
+			allocateIPv6, _ := cmd.Flags().GetBool("allocate-ipv6")
 			plan, _ := cmd.Flags().GetString("plan")
 			nodes, _ := cmd.Flags().GetInt("nodes")
 			networkID, _ := cmd.Flags().GetInt("network-id")
@@ -346,6 +348,8 @@ func createCmd() *cobra.Command {
 				"name":             name,
 				"location_name":    location,
 				"ha_control_plane": ha,
+				"allocate_ipv4":    allocateIPv4,
+				"allocate_ipv6":    allocateIPv6,
 				"node_pools": []map[string]interface{}{
 					{
 						"name":  "default",
@@ -410,6 +414,8 @@ func createCmd() *cobra.Command {
 	cmd.Flags().StringP("location", "l", "", "Location name")
 	cmd.Flags().String("version", "", "Kubernetes version (default: latest)")
 	cmd.Flags().Bool("ha", false, "Enable HA control plane")
+	cmd.Flags().Bool("allocate-ipv4", true, "Assign a public IPv4 to each worker (set false for private workers behind a NAT gateway)")
+	cmd.Flags().Bool("allocate-ipv6", true, "Assign a public IPv6 to each worker (set false for private workers behind a NAT gateway)")
 	cmd.Flags().String("plan", "", "Server plan for the default node pool")
 	cmd.Flags().Int("nodes", 1, "Number of initial worker nodes")
 	cmd.Flags().Int("network-id", 0, "Existing network ID")

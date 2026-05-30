@@ -46,6 +46,7 @@ func NewCmd() *cobra.Command {
 			firewalls, _ := cmd.Flags().GetIntSlice("firewall")
 			backups, _ := cmd.Flags().GetBool("backups")
 			cloudinit, _ := cmd.Flags().GetString("cloudinit")
+			availabilityGroup, _ := cmd.Flags().GetString("availability-group")
 
 			if len(sshKeyIDs) == 0 && password == "" {
 				return fmt.Errorf("either --ssh or --password must be provided")
@@ -85,6 +86,9 @@ func NewCmd() *cobra.Command {
 			}
 			if cloudinit != "" {
 				body["custom_cloudinit"] = cloudinit
+			}
+			if availabilityGroup != "" {
+				body["availability_group_uuid"] = availabilityGroup
 			}
 
 			s := output.NewSpinner("Creating VPS...")
@@ -577,6 +581,7 @@ func NewCmd() *cobra.Command {
 	vpsCreateCmd.Flags().Bool("backups", false, "Enable backups")
 	vpsCreateCmd.Flags().Bool("no-backups", false, "Disable backups")
 	vpsCreateCmd.Flags().StringP("cloudinit", "c", "", "Cloud-init configuration or file path")
+	vpsCreateCmd.Flags().String("availability-group", "", "UUID of the availability group to place the VPS in")
 	_ = vpsCreateCmd.MarkFlagRequired("name")
 	_ = vpsCreateCmd.MarkFlagRequired("plan")
 	_ = vpsCreateCmd.MarkFlagRequired("template")

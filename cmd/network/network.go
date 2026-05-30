@@ -223,5 +223,8 @@ func NewCmd() *cobra.Command {
 	networkDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
 	networkCmd.AddCommand(networkCreateCmd, networkListCmd, networkUpdateCmd, networkDeleteCmd)
+
+	addRouteCmd(networkCmd)
+
 	return networkCmd
 }

@@ -240,6 +240,7 @@ func NewCmd() *cobra.Command {
 			location, _ := cmd.Flags().GetString("location")
 			projectID, _ := cmd.Flags().GetInt("project")
 			label, _ := cmd.Flags().GetString("label")
+			networkID, _ := cmd.Flags().GetInt("network-id")
 
 			body := map[string]interface{}{
 				"name":          name,
@@ -251,6 +252,9 @@ func NewCmd() *cobra.Command {
 			}
 			if label != "" {
 				body["label"] = label
+			}
+			if networkID > 0 {
+				body["network_id"] = networkID
 			}
 
 			s := output.NewSpinner("Creating load balancer...")
@@ -376,6 +380,7 @@ func NewCmd() *cobra.Command {
 	lbCreateCmd.Flags().StringP("location", "l", "", "Location name")
 	lbCreateCmd.Flags().Int("project", 0, "Project ID")
 	lbCreateCmd.Flags().String("label", "", "Optional label")
+	lbCreateCmd.Flags().Int("network-id", 0, "Attach to a private network (reaches targets by their private IP; same location required)")
 	lbCreateCmd.MarkFlagRequired("name")
 	lbCreateCmd.MarkFlagRequired("plan")
 	lbCreateCmd.MarkFlagRequired("location")
