@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 
+	"github.com/CubePathInc/cubecli/cmd/availabilitygroup"
 	"github.com/CubePathInc/cubecli/cmd/baremetal"
 	"github.com/CubePathInc/cubecli/cmd/cdn"
 	configcmd "github.com/CubePathInc/cubecli/cmd/config"
@@ -79,6 +80,7 @@ func init() {
 		location.NewCmd(),
 		vps.NewCmd(),
 		baremetal.NewCmd(),
+		availabilitygroup.NewCmd(),
 		floatingip.NewCmd(),
 		ddosattack.NewCmd(),
 		dns.NewCmd(),
