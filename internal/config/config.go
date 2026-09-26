@@ -61,6 +61,8 @@ type Config struct {
 	// SkillsPrompted records that `cubecli login` already offered to install
 	// the agent skills, so it asks only once.
 	SkillsPrompted bool `json:"skills_prompted,omitempty"`
+	// MCPPrompted records the same for the MCP server.
+	MCPPrompted bool `json:"mcp_prompted,omitempty"`
 }
 
 // legacyConfig matches the pre-profiles config shape for auto-migration.

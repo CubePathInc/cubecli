@@ -124,6 +124,24 @@ skill folders it installed itself, and leaves alone any you have edited unless
 you pass `--force`. In Claude Code you can install them as a plugin instead:
 `/plugin marketplace add CubePathInc/skills`.
 
+## MCP server
+
+The CubePath MCP server (`https://mcp.cubepath.com/mcp`) gives AI agents
+direct access to your infrastructure through tools. `cubecli login` also offers
+to add it to the agents on your machine (skip with `--skip-mcp`).
+
+```bash
+cubecli mcp install                     # every agent found on this machine
+cubecli mcp install --agent claude      # claude, codex, gemini, cursor or vscode
+cubecli mcp status
+cubecli mcp uninstall
+```
+
+Only the server URL is written to each agent's configuration. The first time
+an agent connects, it opens your browser to approve the access, where you
+choose the organization and the permissions. Disconnect agents at any time at
+https://my.cubepath.com/account/connections.
+
 ## Profiles (multiple accounts and organizations)
 
 Each profile holds the credentials of one organization. Log in once per

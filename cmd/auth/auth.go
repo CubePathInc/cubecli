@@ -9,10 +9,12 @@ import (
 	"strings"
 	"time"
 
+	mcpcmd "github.com/CubePathInc/cubecli/cmd/mcp"
 	skillscmd "github.com/CubePathInc/cubecli/cmd/skills"
 	"github.com/CubePathInc/cubecli/internal/api"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	internalConfig "github.com/CubePathInc/cubecli/internal/config"
+	"github.com/CubePathInc/cubecli/internal/mcp"
 	"github.com/CubePathInc/cubecli/internal/oauth"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/CubePathInc/cubecli/internal/skills"
@@ -71,6 +73,7 @@ For CI and other non-interactive use, store an API token instead with
 	cmd.Flags().Bool("no-browser", false, "Print the login URL instead of opening a browser")
 	cmd.Flags().Bool("use", false, "Make this the active profile")
 	cmd.Flags().Bool("skip-skills", false, "Do not offer to install the CubePath skills for AI agents")
+	cmd.Flags().Bool("skip-mcp", false, "Do not offer to add the CubePath MCP server to AI agents")
 	return cmd
 }
 
@@ -204,6 +207,7 @@ func BrowserLogin(cmd *cobra.Command, name, apiURL string, noBrowser, makeActive
 	}
 	warnEnvToken()
 	offerSkills(cmd)
+	offerMCP(cmd, baseURL)
 	return nil
 }
 
@@ -266,7 +270,54 @@ func TokenLogin(cmd *cobra.Command, name, apiURL string, makeActive bool) error 
 	}
 	warnEnvToken()
 	offerSkills(cmd)
+	offerMCP(cmd, internalConfig.APIURL(profile))
 	return nil
+}
+
+// offerMCP asks once, after the first interactive login, whether to add the
+// CubePath MCP server to the AI agents found on this machine.
+func offerMCP(cmd *cobra.Command, apiURL string) {
+	skip, _ := cmd.Flags().GetBool("skip-mcp")
+	if skip || cmdutil.IsJSON(cmd) || !cmdutil.StdinIsTerminal() {
+		return
+	}
+	if internalConfig.LoadOrEmpty().MCPPrompted {
+		return
+	}
+	detected := mcp.Detected()
+	if len(detected) == 0 {
+		return
+	}
+	url := mcp.ResolveURL(cmd.Context(), apiURL)
+	var pending []mcp.Client
+	var names []string
+	for _, c := range detected {
+		if ok, _ := c.Configured(url); !ok {
+			pending = append(pending, c)
+			names = append(names, c.Name)
+		}
+	}
+	markPrompted := func() {
+		_ = internalConfig.Update(func(c *internalConfig.Config) error {
+			c.MCPPrompted = true
+			return nil
+		})
+	}
+	if len(pending) == 0 {
+		markPrompted()
+		return
+	}
+
+	fmt.Println()
+	ok := cmdutil.ConfirmDefaultYes(fmt.Sprintf("Add the CubePath MCP server to %s?", strings.Join(names, ", ")))
+	markPrompted()
+	if !ok {
+		output.PrintInfo("You can add it later with 'cubecli mcp install'.")
+		return
+	}
+	if err := mcpcmd.Install(cmd, pending, url); err != nil {
+		output.PrintWarning(fmt.Sprintf("%v. Retry with 'cubecli mcp install'.", err))
+	}
 }
 
 // offerSkills asks once, after the first interactive login, whether to install
