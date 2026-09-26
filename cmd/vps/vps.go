@@ -233,7 +233,11 @@ func NewCmd() *cobra.Command {
 			}
 
 			if cmdutil.IsJSON(cmd) {
-				return output.PrintJSON(json.RawMessage(resp))
+				raw, err := findVPSInProjects(resp, vpsID)
+				if err != nil {
+					return err
+				}
+				return output.PrintJSON(raw)
 			}
 
 			var projects []struct {
@@ -635,4 +639,26 @@ func NewCmd() *cobra.Command {
 	addISOCmd(vpsCmd)
 
 	return vpsCmd
+}
+
+// findVPSInProjects returns the raw JSON of one VPS from a /projects/ response,
+// untouched, so `vps show --json` carries every field the API sends.
+func findVPSInProjects(resp json.RawMessage, vpsID int) (json.RawMessage, error) {
+	var projects []struct {
+		VPS []json.RawMessage `json:"vps"`
+	}
+	if err := json.Unmarshal(resp, &projects); err != nil {
+		return nil, err
+	}
+	for _, p := range projects {
+		for _, raw := range p.VPS {
+			var v struct {
+				ID int `json:"id"`
+			}
+			if json.Unmarshal(raw, &v) == nil && v.ID == vpsID {
+				return raw, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("VPS %d not found", vpsID)
 }
