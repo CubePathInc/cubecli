@@ -1,12 +1,11 @@
 package profile
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/CubePathInc/cubecli/internal/api"
+	authcmd "github.com/CubePathInc/cubecli/cmd/auth"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	internalConfig "github.com/CubePathInc/cubecli/internal/config"
 	"github.com/CubePathInc/cubecli/internal/output"
@@ -34,7 +33,7 @@ func NewCmd() *cobra.Command {
 func newAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <name>",
-		Short: "Add a new profile",
+		Short: "Add a new profile and log it in (browser login, or --token)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := strings.TrimSpace(args[0])
@@ -51,53 +50,18 @@ func newAddCmd() *cobra.Command {
 				}
 			}
 
-			fmt.Print("Enter CubePath API token for this profile: ")
-			scanner := bufio.NewScanner(os.Stdin)
-			if !scanner.Scan() {
-				return fmt.Errorf("failed to read input")
-			}
-			token := strings.TrimSpace(scanner.Text())
-			if token == "" {
-				return fmt.Errorf("API token cannot be empty")
-			}
-
 			apiURL, _ := cmd.Flags().GetString("api-url")
-
-			profile := &internalConfig.Profile{APIToken: token}
-			if apiURL != "" {
-				profile.APIURL = apiURL
+			useToken, _ := cmd.Flags().GetBool("token")
+			noBrowser, _ := cmd.Flags().GetBool("no-browser")
+			if useToken || !cmdutil.StdinIsTerminal() {
+				return authcmd.TokenLogin(cmd, name, apiURL, false)
 			}
-
-			s := output.NewSpinner("Validating API token...")
-			s.Start()
-			client := api.NewClient(internalConfig.APIURL(profile), token)
-			_, err := client.Get("/sshkey/user/sshkeys")
-			s.Stop()
-			if err != nil {
-				return err
-			}
-
-			if cfg.Profiles == nil {
-				cfg.Profiles = map[string]*internalConfig.Profile{}
-			}
-			cfg.Profiles[name] = profile
-			if cfg.CurrentProfile == "" {
-				cfg.CurrentProfile = name
-			}
-			if err := internalConfig.Save(cfg); err != nil {
-				return fmt.Errorf("failed to save config: %w", err)
-			}
-
-			output.PrintSuccess(fmt.Sprintf("Profile %q added", name))
-			if cfg.CurrentProfile == name {
-				output.PrintInfo(fmt.Sprintf("Active profile: %s", name))
-			} else {
-				output.PrintInfo(fmt.Sprintf("Run 'cubecli profile use %s' to switch", name))
-			}
-			return nil
+			return authcmd.BrowserLogin(cmd, name, apiURL, noBrowser, false)
 		},
 	}
 	cmd.Flags().String("api-url", "", "Override API URL for this profile")
+	cmd.Flags().Bool("token", false, "Store an API token instead of logging in with the browser")
+	cmd.Flags().Bool("no-browser", false, "Print the login URL instead of opening a browser")
 	cmd.Flags().BoolP("force", "f", false, "Replace profile without confirmation if it already exists")
 	return cmd
 }
@@ -119,7 +83,7 @@ func newListCmd() *cobra.Command {
 			}
 
 			if len(names) == 0 {
-				output.PrintWarning("No profiles configured. Run 'cubecli profile add <name>' or 'cubecli config setup'.")
+				output.PrintWarning("No profiles configured. Run 'cubecli login'.")
 				return nil
 			}
 
@@ -208,12 +172,16 @@ func newDeleteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			cfg := internalConfig.LoadOrEmpty()
-			if _, ok := cfg.Profiles[name]; !ok {
+			p, ok := cfg.Profiles[name]
+			if !ok {
 				return fmt.Errorf("profile %q not found", name)
 			}
 			if !cmdutil.CheckForce(cmd, fmt.Sprintf("Delete profile %q?", name)) {
 				output.PrintWarning("Aborted")
 				return nil
+			}
+			if p.OAuth != nil {
+				authcmd.RevokeSession(p.OAuth)
 			}
 			delete(cfg.Profiles, name)
 			if cfg.CurrentProfile == name {

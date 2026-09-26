@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 
+	authcmd "github.com/CubePathInc/cubecli/cmd/auth"
 	"github.com/CubePathInc/cubecli/cmd/availabilitygroup"
 	"github.com/CubePathInc/cubecli/cmd/baremetal"
 	"github.com/CubePathInc/cubecli/cmd/cdn"
@@ -22,6 +23,7 @@ import (
 	"github.com/CubePathInc/cubecli/internal/api"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	internalConfig "github.com/CubePathInc/cubecli/internal/config"
+	"github.com/CubePathInc/cubecli/internal/oauth"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +41,7 @@ var rootCmd = &cobra.Command{
 
 		// Skip auth for commands that don't need it
 		switch rootName {
-		case "config", "profile", "version", "update", "completion", "help", "cubecli":
+		case "config", "profile", "auth", "login", "logout", "version", "update", "completion", "help", "cubecli":
 			return nil
 		}
 
@@ -50,7 +52,12 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		client := api.NewClient(internalConfig.APIURL(p), p.APIToken)
+		var client *api.Client
+		if p.OAuth != nil {
+			client = api.NewClientWithAuth(internalConfig.APIURL(p), oauth.NewTokenSource(name, p.OAuth))
+		} else {
+			client = api.NewClient(internalConfig.APIURL(p), p.APIToken)
+		}
 		ctx := cmd.Context()
 		ctx = context.WithValue(ctx, cmdutil.ClientKey, client)
 		ctx = context.WithValue(ctx, cmdutil.ActiveProfileKey, name)
@@ -71,6 +78,9 @@ func init() {
 	rootCmd.PersistentFlags().String("profile", "", "Profile to use (overrides CUBE_PROFILE and current profile)")
 
 	rootCmd.AddCommand(
+		authcmd.NewLoginCmd(),
+		authcmd.NewLogoutCmd(),
+		authcmd.NewCmd(),
 		configcmd.NewCmd(),
 		profile.NewCmd(),
 		sshkey.NewCmd(),

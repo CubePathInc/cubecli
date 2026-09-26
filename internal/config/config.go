@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 )
 
 const (
@@ -15,14 +16,50 @@ const (
 	configFile         = "config.json"
 )
 
+// Profile holds the credentials for one account/organization. Exactly one of
+// APIToken (static token, e.g. for CI) or OAuth (browser login) is set.
 type Profile struct {
-	APIToken string `json:"api_token"`
-	APIURL   string `json:"api_url,omitempty"`
+	APIToken string            `json:"api_token,omitempty"`
+	APIURL   string            `json:"api_url,omitempty"`
+	OAuth    *OAuthCredentials `json:"oauth,omitempty"`
+}
+
+// OAuthCredentials is what `cubecli login` stores. The access token is short
+// lived and refreshed transparently; the refresh token rotates on every use.
+type OAuthCredentials struct {
+	Issuer          string    `json:"issuer"`
+	TokenEndpoint   string    `json:"token_endpoint"`
+	RevokeEndpoint  string    `json:"revocation_endpoint,omitempty"`
+	ClientID        string    `json:"client_id"`
+	Resource        string    `json:"resource"`
+	AccessToken     string    `json:"access_token"`
+	RefreshToken    string    `json:"refresh_token"`
+	AccessExpiresAt time.Time `json:"access_expires_at"`
+	Scopes          []string  `json:"scopes,omitempty"`
+	Email           string    `json:"email,omitempty"`
+	Organization    string    `json:"organization,omitempty"`
+}
+
+// AuthMethod reports how a profile authenticates: "oauth", "token" or "".
+func (p *Profile) AuthMethod() string {
+	switch {
+	case p == nil:
+		return ""
+	case p.OAuth != nil:
+		return "oauth"
+	case p.APIToken != "":
+		return "token"
+	}
+	return ""
 }
 
 type Config struct {
 	CurrentProfile string              `json:"current_profile"`
 	Profiles       map[string]*Profile `json:"profiles"`
+	// OAuthClients maps an authorization server issuer to the client_id this
+	// machine registered there, so every login reuses one client instead of
+	// registering a new one each time.
+	OAuthClients map[string]string `json:"oauth_clients,omitempty"`
 }
 
 // legacyConfig matches the pre-profiles config shape for auto-migration.
@@ -82,6 +119,8 @@ func LoadOrEmpty() *Config {
 	return cfg
 }
 
+// Save writes the config atomically (temp file + rename), so a concurrent reader
+// never sees a half-written file.
 func Save(cfg *Config) error {
 	if err := os.MkdirAll(Dir(), 0700); err != nil {
 		return err
@@ -92,7 +131,40 @@ func Save(cfg *Config) error {
 		return err
 	}
 
-	return os.WriteFile(Path(), data, 0600)
+	tmp, err := os.CreateTemp(Dir(), configFile+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), Path())
+}
+
+// Update runs fn on a freshly loaded config while holding the config lock and
+// saves the result. Use it for any read-modify-write that can race with another
+// cubecli process, such as refreshing OAuth tokens.
+func Update(fn func(cfg *Config) error) error {
+	unlock, err := Lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	cfg := LoadOrEmpty()
+	if err := fn(cfg); err != nil {
+		return err
+	}
+	return Save(cfg)
 }
 
 // ActiveProfileName resolves which profile should be used, in order:
@@ -122,12 +194,12 @@ func (c *Config) ActiveProfile(explicit string) (*Profile, string, error) {
 	p, ok := c.Profiles[name]
 	if !ok {
 		if len(c.Profiles) == 0 {
-			return nil, "", fmt.Errorf("no profiles configured: set CUBE_API_TOKEN or run 'cubecli config setup'")
+			return nil, "", fmt.Errorf("no profiles configured: run 'cubecli login' or set CUBE_API_TOKEN")
 		}
 		return nil, "", fmt.Errorf("profile %q not found (known: %s)", name, c.profileNamesList())
 	}
-	if p.APIToken == "" {
-		return nil, "", fmt.Errorf("profile %q has no API token: run 'cubecli profile add %s'", name, name)
+	if p.AuthMethod() == "" {
+		return nil, "", fmt.Errorf("profile %q has no credentials: run 'cubecli login --profile %s'", name, name)
 	}
 	return p, name, nil
 }

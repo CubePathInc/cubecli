@@ -41,6 +41,14 @@ func ConfirmAction(msg string) bool {
 	return false
 }
 
+// StdinIsTerminal reports whether stdin is interactive. Commands that used to
+// read a token from stdin keep doing so when it is piped, so scripts do not
+// suddenly open a browser.
+func StdinIsTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
 func CheckForce(cmd *cobra.Command, msg string) bool {
 	force, _ := cmd.Flags().GetBool("force")
 	if force {

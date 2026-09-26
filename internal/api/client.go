@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,16 +12,36 @@ import (
 	"github.com/CubePathInc/cubecli/internal/version"
 )
 
+// TokenSource supplies the bearer token. Refresh is called once when the API
+// answers 401 to a request sent with `stale`.
+type TokenSource interface {
+	Token() (string, error)
+	Refresh(stale string) (string, error)
+}
+
+// StaticToken is a TokenSource for API tokens, which cannot be refreshed.
+type StaticToken string
+
+func (t StaticToken) Token() (string, error) { return string(t), nil }
+
+func (t StaticToken) Refresh(string) (string, error) { return "", errNotRefreshable }
+
+var errNotRefreshable = errors.New("token cannot be refreshed")
+
 type Client struct {
 	BaseURL    string
-	Token      string
+	Auth       TokenSource
 	HTTPClient *http.Client
 }
 
 func NewClient(baseURL, token string) *Client {
+	return NewClientWithAuth(baseURL, StaticToken(token))
+}
+
+func NewClientWithAuth(baseURL string, auth TokenSource) *Client {
 	return &Client{
 		BaseURL: baseURL,
-		Token:   token,
+		Auth:    auth,
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -28,28 +49,35 @@ func NewClient(baseURL, token string) *Client {
 }
 
 func (c *Client) doRequest(method, path string, body interface{}) (json.RawMessage, error) {
-	var reqBody io.Reader
+	var data []byte
 	if body != nil {
-		data, err := json.Marshal(body)
+		var err error
+		data, err = json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
-		reqBody = bytes.NewReader(data)
 	}
 
-	url := c.BaseURL + path
-	req, err := http.NewRequest(method, url, reqBody)
+	token, err := c.Auth.Token()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
-
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", fmt.Sprintf("CubeCLI/%s", version.Version))
-
-	resp, err := c.HTTPClient.Do(req)
+	resp, err := c.send(method, path, data, token)
 	if err != nil {
-		return nil, fmt.Errorf("connection error: %w", err)
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		// An OAuth access token may have been revoked or expired early: refresh
+		// once and retry. API tokens are not refreshable and keep the 401.
+		if fresh, rerr := c.Auth.Refresh(token); rerr == nil {
+			resp.Body.Close()
+			if resp, err = c.send(method, path, data, fresh); err != nil {
+				return nil, err
+			}
+		} else if !errors.Is(rerr, errNotRefreshable) {
+			resp.Body.Close()
+			return nil, rerr
+		}
 	}
 	defer resp.Body.Close()
 
@@ -67,6 +95,27 @@ func (c *Client) doRequest(method, path string, body interface{}) (json.RawMessa
 	}
 
 	return json.RawMessage(respBody), nil
+}
+
+func (c *Client) send(method, path string, data []byte, token string) (*http.Response, error) {
+	var reqBody io.Reader
+	if data != nil {
+		reqBody = bytes.NewReader(data)
+	}
+	req, err := http.NewRequest(method, c.BaseURL+path, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", fmt.Sprintf("CubeCLI/%s", version.Version))
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("connection error: %w", err)
+	}
+	return resp, nil
 }
 
 func (c *Client) Get(path string) (json.RawMessage, error) {

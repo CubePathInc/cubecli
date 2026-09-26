@@ -33,8 +33,8 @@ cubecli update
 ## Quick Start
 
 ```bash
-# Configure your API token
-cubecli config setup
+# Log in with your browser
+cubecli login
 
 # List your projects
 cubecli project list
@@ -46,35 +46,77 @@ cubecli vps list
 cubecli <command> --help
 ```
 
-## Configuration
+## Authentication
 
-CubeCLI reads credentials from (in order):
-
-1. `CUBE_API_TOKEN` environment variable
-2. Active profile in `~/.cubecli/config.json`
+`cubecli login` opens your browser, you approve the access on the CubePath
+dashboard (choosing the organization and the permissions), and the session is
+stored in a profile. The access token is refreshed automatically; you stay
+logged in as long as you use the CLI at least once every 30 days.
 
 ```bash
-# Set up interactively (validates the token) — creates the 'default' profile
-cubecli config setup
+# Log in the active profile ('default' if there is none)
+cubecli login
 
-# Or use an environment variable
+# Log in a named profile
+cubecli login work
+
+# On a machine without a browser (e.g. over SSH): prints the URL instead
+cubecli login --no-browser
+
+# See how every profile is authenticated
+cubecli auth status
+
+# Revoke the session and remove the stored credentials
+cubecli logout work
+cubecli logout --all
+```
+
+The consent screen only pre-selects read permissions. Tick the write
+permissions you need there, or the CLI can list resources but not create or
+change them.
+
+Browser sessions can be disconnected at any time from the dashboard, under
+Account > Connections.
+
+### API tokens (CI and scripts)
+
+For non-interactive use, create an API token in the dashboard and either store
+it in a profile or pass it through the environment:
+
+```bash
+# Store a token in a profile (prompts for it and validates it)
+cubecli login ci --token
+
+# Or use an environment variable, which overrides every profile
 export CUBE_API_TOKEN="your-api-token"
 
 # Optionally override the API URL
 export CUBE_API_URL="https://api.cubepath.com"
 ```
 
-## Profiles (multiple accounts)
+`cubecli profile add` and `cubecli config setup` still read a token from stdin
+when it is piped, so existing scripts keep working.
 
-Store multiple API tokens and switch between them — useful for managing a
-personal account and a work account from the same shell.
+CubeCLI reads credentials from (in order):
+
+1. `CUBE_API_TOKEN` environment variable
+2. Active profile in `~/.cubecli/config.json`
+
+## Profiles (multiple accounts and organizations)
+
+Each profile holds the credentials of one organization. Log in once per
+organization and switch between them.
 
 ```bash
-# Add a new profile (prompts for the token and validates it)
-cubecli profile add work
+# Log in a new profile (choose the organization on the consent screen)
+cubecli login work
+cubecli login personal
 
 # Point a profile at a different API URL (e.g. staging)
-cubecli profile add staging --api-url https://api.staging.cubepath.com
+cubecli login staging --api-url https://api.staging.cubepath.com
+
+# Log in and make it the active profile
+cubecli login work --use
 
 # List configured profiles (active marked with *)
 cubecli profile list
