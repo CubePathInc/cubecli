@@ -60,6 +60,9 @@ type Config struct {
 	// machine registered there, so every login reuses one client instead of
 	// registering a new one each time.
 	OAuthClients map[string]string `json:"oauth_clients,omitempty"`
+	// SkillsPrompted records that `cubecli login` already offered to install
+	// the agent skills, so it asks only once.
+	SkillsPrompted bool `json:"skills_prompted,omitempty"`
 }
 
 // legacyConfig matches the pre-profiles config shape for auto-migration.

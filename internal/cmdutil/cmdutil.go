@@ -41,6 +41,17 @@ func ConfirmAction(msg string) bool {
 	return false
 }
 
+// ConfirmDefaultYes asks a yes/no question where Enter means yes.
+func ConfirmDefaultYes(msg string) bool {
+	fmt.Printf("%s [Y/n]: ", msg)
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+		return answer == "" || answer == "y" || answer == "yes"
+	}
+	return false
+}
+
 // StdinIsTerminal reports whether stdin is interactive. Commands that used to
 // read a token from stdin keep doing so when it is piped, so scripts do not
 // suddenly open a browser.

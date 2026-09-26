@@ -9,11 +9,13 @@ import (
 	"strings"
 	"time"
 
+	skillscmd "github.com/CubePathInc/cubecli/cmd/skills"
 	"github.com/CubePathInc/cubecli/internal/api"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	internalConfig "github.com/CubePathInc/cubecli/internal/config"
 	"github.com/CubePathInc/cubecli/internal/oauth"
 	"github.com/CubePathInc/cubecli/internal/output"
+	"github.com/CubePathInc/cubecli/internal/skills"
 	"github.com/spf13/cobra"
 )
 
@@ -68,6 +70,7 @@ For CI and other non-interactive use, store an API token instead with
 	cmd.Flags().Bool("token", false, "Store an API token instead of logging in with the browser")
 	cmd.Flags().Bool("no-browser", false, "Print the login URL instead of opening a browser")
 	cmd.Flags().Bool("use", false, "Make this the active profile")
+	cmd.Flags().Bool("skip-skills", false, "Do not offer to install the CubePath skills for AI agents")
 	return cmd
 }
 
@@ -200,6 +203,7 @@ func BrowserLogin(cmd *cobra.Command, name, apiURL string, noBrowser, makeActive
 		output.PrintInfo(fmt.Sprintf("Run 'cubecli profile use %s' to switch, or pass --profile %s", name, name))
 	}
 	warnEnvToken()
+	offerSkills(cmd)
 	return nil
 }
 
@@ -261,7 +265,51 @@ func TokenLogin(cmd *cobra.Command, name, apiURL string, makeActive bool) error 
 		output.PrintInfo(fmt.Sprintf("Run 'cubecli profile use %s' to switch", name))
 	}
 	warnEnvToken()
+	offerSkills(cmd)
 	return nil
+}
+
+// offerSkills asks once, after the first interactive login, whether to install
+// the CubePath skills for the AI agents found on this machine.
+func offerSkills(cmd *cobra.Command) {
+	skip, _ := cmd.Flags().GetBool("skip-skills")
+	if skip || cmdutil.IsJSON(cmd) || !cmdutil.StdinIsTerminal() {
+		return
+	}
+	if internalConfig.LoadOrEmpty().SkillsPrompted {
+		return
+	}
+	targets := skills.DefaultTargets()
+	if len(targets) == 0 {
+		return // no agent here; ask again after one is installed
+	}
+	markPrompted := func() {
+		_ = internalConfig.Update(func(c *internalConfig.Config) error {
+			c.SkillsPrompted = true
+			return nil
+		})
+	}
+	var names []string
+	for _, t := range targets {
+		if dir, err := t.Dir(false); err == nil {
+			if installed, _ := skills.List(dir); len(installed) > 0 {
+				markPrompted() // already installed, 'cubecli skills update' keeps them current
+				return
+			}
+		}
+		names = append(names, t.Name)
+	}
+
+	fmt.Println()
+	ok := cmdutil.ConfirmDefaultYes(fmt.Sprintf("Install the CubePath skills for your AI agents (%s)?", strings.Join(names, "; ")))
+	markPrompted()
+	if !ok {
+		output.PrintInfo("You can install them later with 'cubecli skills install'.")
+		return
+	}
+	if err := skillscmd.Run(cmd, targets, false, "", false); err != nil {
+		output.PrintWarning(fmt.Sprintf("Could not install the skills: %v. Retry with 'cubecli skills install'.", err))
+	}
 }
 
 // NewLogoutCmd returns `logout`, registered both at the root and under `auth`.

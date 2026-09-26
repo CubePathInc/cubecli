@@ -18,6 +18,7 @@ import (
 	"github.com/CubePathInc/cubecli/cmd/network"
 	"github.com/CubePathInc/cubecli/cmd/profile"
 	"github.com/CubePathInc/cubecli/cmd/project"
+	skillscmd "github.com/CubePathInc/cubecli/cmd/skills"
 	"github.com/CubePathInc/cubecli/cmd/sshkey"
 	"github.com/CubePathInc/cubecli/cmd/vps"
 	"github.com/CubePathInc/cubecli/internal/api"
@@ -41,7 +42,7 @@ var rootCmd = &cobra.Command{
 
 		// Skip auth for commands that don't need it
 		switch rootName {
-		case "config", "profile", "auth", "login", "logout", "version", "update", "completion", "help", "cubecli":
+		case "config", "profile", "auth", "login", "logout", "skills", "docs", "version", "update", "completion", "help", "cubecli":
 			return nil
 		}
 
@@ -97,5 +98,6 @@ func init() {
 		lb.NewCmd(),
 		cdn.NewCmd(),
 		kubernetes.NewCmd(),
+		skillscmd.NewCmd(),
 	)
 }

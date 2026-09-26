@@ -102,6 +102,28 @@ CubeCLI reads credentials from (in order):
 1. `CUBE_API_TOKEN` environment variable
 2. Active profile in `~/.cubecli/config.json`
 
+## AI agent skills
+
+The [CubePath skills](https://github.com/CubePathInc/skills) teach AI coding
+agents (Claude Code, Codex, Gemini CLI, Cursor) to manage CubePath with
+cubecli. After your first `cubecli login`, CubeCLI offers to install them for
+the agents it finds on your machine (skip with `--skip-skills`).
+
+```bash
+cubecli skills install                  # detected agents
+cubecli skills install --agent claude   # ~/.claude/skills (Claude Code)
+cubecli skills install --agent agents   # ~/.agents/skills (Codex, Gemini CLI, Cursor)
+cubecli skills install --project        # ./.claude/skills or ./.agents/skills, to commit with a repo
+cubecli skills list                     # installed versions, updates available
+cubecli skills update
+cubecli skills uninstall
+```
+
+Downloads are checked against the release's SHA256SUMS. CubeCLI only touches
+skill folders it installed itself, and leaves alone any you have edited unless
+you pass `--force`. In Claude Code you can install them as a plugin instead:
+`/plugin marketplace add CubePathInc/skills`.
+
 ## Profiles (multiple accounts and organizations)
 
 Each profile holds the credentials of one organization. Log in once per
