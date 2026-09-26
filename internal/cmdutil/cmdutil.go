@@ -52,9 +52,7 @@ func ConfirmDefaultYes(msg string) bool {
 	return false
 }
 
-// StdinIsTerminal reports whether stdin is interactive. Commands that used to
-// read a token from stdin keep doing so when it is piped, so scripts do not
-// suddenly open a browser.
+// StdinIsTerminal reports whether stdin is interactive.
 func StdinIsTerminal() bool {
 	fi, err := os.Stdin.Stat()
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0

@@ -24,8 +24,7 @@ type Profile struct {
 	OAuth    *OAuthCredentials `json:"oauth,omitempty"`
 }
 
-// OAuthCredentials is what `cubecli login` stores. The access token is short
-// lived and refreshed transparently; the refresh token rotates on every use.
+// OAuthCredentials is the session stored by `cubecli login`.
 type OAuthCredentials struct {
 	Issuer          string    `json:"issuer"`
 	TokenEndpoint   string    `json:"token_endpoint"`
@@ -57,8 +56,7 @@ type Config struct {
 	CurrentProfile string              `json:"current_profile"`
 	Profiles       map[string]*Profile `json:"profiles"`
 	// OAuthClients maps an authorization server issuer to the client_id this
-	// machine registered there, so every login reuses one client instead of
-	// registering a new one each time.
+	// machine registered there, reused by every login.
 	OAuthClients map[string]string `json:"oauth_clients,omitempty"`
 	// SkillsPrompted records that `cubecli login` already offered to install
 	// the agent skills, so it asks only once.
@@ -122,8 +120,7 @@ func LoadOrEmpty() *Config {
 	return cfg
 }
 
-// Save writes the config atomically (temp file + rename), so a concurrent reader
-// never sees a half-written file.
+// Save writes the config atomically (temp file + rename).
 func Save(cfg *Config) error {
 	if err := os.MkdirAll(Dir(), 0700); err != nil {
 		return err
@@ -153,9 +150,8 @@ func Save(cfg *Config) error {
 	return os.Rename(tmp.Name(), Path())
 }
 
-// Update runs fn on a freshly loaded config while holding the config lock and
-// saves the result. Use it for any read-modify-write that can race with another
-// cubecli process, such as refreshing OAuth tokens.
+// Update loads the config, runs fn on it and saves it, all under the config
+// lock.
 func Update(fn func(cfg *Config) error) error {
 	unlock, err := Lock()
 	if err != nil {

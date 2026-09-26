@@ -31,8 +31,7 @@ type LoginOptions struct {
 	NoBrowser bool
 	In        io.Reader
 	Out       io.Writer
-	// ClientRegistered is called as soon as a new client is registered, so it is
-	// persisted even if the user abandons the login.
+	// ClientRegistered is called when a new client is registered.
 	ClientRegistered func(issuer, clientID string)
 }
 
@@ -120,10 +119,9 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	return &LoginResult{Meta: meta, Resource: pr.Resource, ClientID: clientID, Token: tok}, nil
 }
 
-// startAuthorization calls the authorization endpoint itself instead of sending
-// the browser there, and returns the consent page it redirects to. Doing it here
-// turns an unknown client into an error cubecli can recover from, instead of a
-// JSON error page in the browser.
+// startAuthorization calls the authorization endpoint and returns the consent
+// page it redirects to, so an unknown client is detected here rather than in
+// the browser.
 func startAuthorization(ctx context.Context, meta *ServerMetadata, resource, clientID, redirect, state, challenge string) (string, error) {
 	q := url.Values{
 		"response_type":         {"code"},
@@ -134,8 +132,7 @@ func startAuthorization(ctx context.Context, meta *ServerMetadata, resource, cli
 		"code_challenge_method": {"S256"},
 		"resource":              {resource},
 	}
-	// Ask for everything the server offers: the user decides on the consent
-	// screen. Without a scope the server would only ever grant read access.
+	// Request every scope; the user picks on the consent screen.
 	if len(meta.ScopesSupported) > 0 {
 		q.Set("scope", strings.Join(meta.ScopesSupported, " "))
 	}

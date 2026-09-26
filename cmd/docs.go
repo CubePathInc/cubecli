@@ -11,9 +11,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// `cubecli docs markdown <dir>` writes a compact command reference, one file per
-// command group. It feeds the CubePath agent skills, whose CI regenerates it and
-// fails when it drifts, so the skills never document flags that do not exist.
+// `cubecli docs markdown <dir>` writes a Markdown command reference, one file
+// per command group. The CubePath agent skills are built from it.
 func init() {
 	docsCmd := &cobra.Command{
 		Use:    "docs",

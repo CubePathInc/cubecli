@@ -16,9 +16,9 @@ import (
 	"time"
 )
 
-// fakeServer plays both the API (RFC 9728 document) and the authorization server,
-// with the same rules as cubepath-identity: exact redirect_uri match, PKCE S256,
-// refresh token rotation and reuse detection that revokes the grant.
+// fakeServer serves the API metadata and a strict authorization server: exact
+// redirect_uri match, PKCE S256, and refresh token rotation with reuse
+// detection that revokes the grant.
 type fakeServer struct {
 	t   *testing.T
 	srv *httptest.Server

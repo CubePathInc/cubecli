@@ -641,8 +641,7 @@ func NewCmd() *cobra.Command {
 	return vpsCmd
 }
 
-// findVPSInProjects returns the raw JSON of one VPS from a /projects/ response,
-// untouched, so `vps show --json` carries every field the API sends.
+// findVPSInProjects returns the raw JSON of one VPS from a /projects/ response.
 func findVPSInProjects(resp json.RawMessage, vpsID int) (json.RawMessage, error) {
 	var projects []struct {
 		VPS []json.RawMessage `json:"vps"`

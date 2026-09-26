@@ -24,9 +24,8 @@ type Target struct {
 	bins   []string
 }
 
-// Targets lists every place skills can be installed. Paths per the agents' docs:
-// Claude Code reads ~/.claude/skills; Codex, Gemini CLI and Cursor all read
-// ~/.agents/skills (Cursor also reads ~/.claude/skills).
+// Targets lists every place skills can be installed. Claude Code reads
+// ~/.claude/skills; Codex, Gemini CLI and Cursor read ~/.agents/skills.
 var Targets = []Target{
 	{ID: "claude", Name: "Claude Code", parent: ".claude", probes: []string{".claude"}, bins: []string{"claude"}},
 	{ID: "agents", Name: "Codex, Gemini CLI, Cursor", parent: ".agents",
@@ -112,9 +111,8 @@ func DefaultTargets() []Target {
 	return out
 }
 
-// markerFile marks a skill directory as installed by cubecli. Without it,
-// cubecli never touches a directory, so a user's own skill with the same name
-// is safe.
+// markerFile marks a skill directory as installed by cubecli. Directories
+// without it are never modified.
 const markerFile = ".cubecli-skill.json"
 
 type marker struct {
@@ -203,8 +201,7 @@ func installOne(b *Bundle, dir, name string, force bool) (Outcome, error) {
 		}
 	}
 
-	// Build the new copy next to the destination, then swap it in, so a failure
-	// never leaves a half-written skill behind.
+	// Stage the new copy next to the destination and swap it in.
 	staging, err := os.MkdirTemp(dir, "."+name+".new-")
 	if err != nil {
 		return Outcome{}, err

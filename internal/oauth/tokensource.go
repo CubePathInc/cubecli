@@ -10,8 +10,7 @@ import (
 	"github.com/CubePathInc/cubecli/internal/config"
 )
 
-// refreshMargin refreshes slightly before expiry so a request never leaves with
-// a token that expires in flight.
+// refreshMargin is how long before expiry the access token is refreshed.
 const refreshMargin = 60 * time.Second
 
 // TokenSource serves the access token of an OAuth profile, refreshing it when it
@@ -39,10 +38,9 @@ func (ts *TokenSource) Token() (string, error) {
 	return ts.Refresh(current)
 }
 
-// Refresh replaces the access token `stale`. It is safe against other cubecli
-// processes: under the config lock it re-reads the profile, and if somebody else
-// already rotated the tokens it adopts theirs instead of presenting a refresh
-// token that is no longer current, which would make the server revoke the grant.
+// Refresh replaces the access token `stale`. It re-reads the profile under the
+// config lock, so if another cubecli process already refreshed, its tokens are
+// used instead of refreshing again.
 func (ts *TokenSource) Refresh(stale string) (string, error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()

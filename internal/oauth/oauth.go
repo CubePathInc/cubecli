@@ -25,9 +25,8 @@ const (
 	callbackPath = "/callback"
 )
 
-// callbackPorts are the loopback ports registered for the client. The server
-// matches redirect URIs exactly, port included, so a random port would need a
-// new client registration on every login. The first free one is used.
+// callbackPorts are the loopback ports registered for the client. Redirect URIs
+// must match exactly, so the ports are fixed; the first free one is used.
 var callbackPorts = []int{38271, 38272, 38273, 38274, 38275}
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
@@ -241,7 +240,7 @@ func parseError(status int, body []byte) error {
 	if json.Unmarshal(body, e) == nil && e.Code != "" {
 		return e
 	}
-	// FastAPI-style {"detail": "..."} from endpoints outside the OAuth spec.
+	// {"detail": "..."} from endpoints outside the OAuth spec.
 	var d struct {
 		Detail string `json:"detail"`
 	}
@@ -251,8 +250,7 @@ func parseError(status int, body []byte) error {
 	return e
 }
 
-// requireSecureURL refuses plain http except towards the local machine, which
-// is what a development stack uses.
+// requireSecureURL refuses plain http except to the local machine.
 func requireSecureURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {

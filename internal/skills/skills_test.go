@@ -60,7 +60,7 @@ func releaseEntries(ver, min string) []entry {
 	}
 }
 
-// serve publishes one release per tag; the last one is "latest".
+// serve publishes one release per tag and marks `latest` as the latest one.
 func serve(t *testing.T, releases map[string][]byte, latest string, corrupt bool) {
 	t.Helper()
 	mux := http.NewServeMux()

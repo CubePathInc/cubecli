@@ -8,13 +8,10 @@ import (
 
 const lockFile = "config.lock"
 
-// Lock takes an exclusive, cross-process lock on the config directory and
-// returns the function that releases it. It blocks until the lock is free.
-//
-// Refreshing OAuth tokens needs it: the refresh token rotates on every use and the
-// authorization server revokes the whole grant when an already-rotated token is
-// presented again. Two cubecli processes refreshing at once would log the user
-// out everywhere.
+// Lock takes an exclusive lock on the config directory, shared by every cubecli
+// process, and returns the function that releases it. Token refreshes run under
+// it: refresh tokens rotate on every use, and presenting an old one revokes the
+// session.
 func Lock() (func(), error) {
 	if err := os.MkdirAll(Dir(), 0700); err != nil {
 		return nil, err

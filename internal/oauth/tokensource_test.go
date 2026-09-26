@@ -10,9 +10,8 @@ import (
 	"github.com/CubePathInc/cubecli/internal/config"
 )
 
-// Several cubecli processes with the same expired token must result in ONE
-// refresh. A second refresh with the rotated token would make the server revoke
-// the grant and log the user out everywhere.
+// Concurrent processes holding the same expired token must refresh only once;
+// a second refresh would reuse a rotated token and revoke the grant.
 func TestConcurrentRefreshRotatesOnce(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("USERPROFILE", t.TempDir())

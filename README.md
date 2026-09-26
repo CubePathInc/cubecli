@@ -76,7 +76,7 @@ permissions you need there, or the CLI can list resources but not create or
 change them.
 
 Browser sessions can be disconnected at any time from the dashboard, under
-Account > Connections.
+Account > Connected apps (https://my.cubepath.com/account/connections).
 
 ### API tokens (CI and scripts)
 

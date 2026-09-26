@@ -458,8 +458,8 @@ func newStatusCmd() *cobra.Command {
 	}
 }
 
-// whoami returns the account email and the organization the token is bound to.
-// Best effort: a failure only means the status output is less descriptive.
+// whoami returns the account email and the organization of the session, or
+// empty strings if they cannot be read.
 func whoami(baseURL, accessToken string) (email, organization string) {
 	raw, err := api.NewClient(baseURL, accessToken).Get("/account/me")
 	if err != nil {
@@ -492,13 +492,13 @@ func hasWriteScope(scopes []string) bool {
 	return false
 }
 
-// RevokeSession revokes a browser session on the server, warning instead of
-// failing: the local credentials are removed either way.
+// RevokeSession revokes a browser session on the server. Failures are only
+// reported as a warning.
 func RevokeSession(creds *internalConfig.OAuthCredentials) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := oauth.Revoke(ctx, creds.RevokeEndpoint, creds.ClientID, creds.RefreshToken, "refresh_token"); err != nil {
-		output.PrintWarning(fmt.Sprintf("Could not revoke the session on the server (%v). Disconnect it in the dashboard under Account > Connections.", err))
+		output.PrintWarning(fmt.Sprintf("Could not revoke the session on the server (%v). Disconnect it at https://my.cubepath.com/account/connections.", err))
 	}
 }
 
