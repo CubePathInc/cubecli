@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 
 	authcmd "github.com/CubePathInc/cubecli/cmd/auth"
 	"github.com/CubePathInc/cubecli/cmd/availabilitygroup"
@@ -55,6 +56,9 @@ var rootCmd = &cobra.Command{
 		}
 
 		var client *api.Client
+		if p.OAuth != nil && !oauth.ResourceIsAPI(p.OAuth.Resource, internalConfig.APIURL(p)) {
+			return fmt.Errorf("profile %q uses a browser login that the CubePath API does not accept yet; log it in with an API token: cubecli login %s --token", name, name)
+		}
 		if p.OAuth != nil {
 			client = api.NewClientWithAuth(internalConfig.APIURL(p), oauth.NewTokenSource(name, p.OAuth))
 		} else {

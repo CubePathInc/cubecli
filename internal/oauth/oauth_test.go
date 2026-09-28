@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,13 +33,16 @@ type fakeServer struct {
 	revoked       bool
 	refreshes     int32
 	revocations   []string
+	resource      string
 }
 
 type pending struct {
 	clientID, redirect, challenge, resource string
 }
 
-const fakeResource = "https://mcp.example.test/mcp"
+// fakeResource is the resource the fake API advertises. Set in newFakeServer
+// to the server's own URL, as an API that accepts browser-login tokens does.
+var fakeResource string
 
 func newFakeServer(t *testing.T) *fakeServer {
 	f := &fakeServer{t: t, clients: map[string][]string{}, codes: map[string]pending{}}
@@ -46,9 +50,11 @@ func newFakeServer(t *testing.T) *fakeServer {
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	issuer := f.srv.URL
+	fakeResource = f.srv.URL
+	f.resource = fakeResource
 
 	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]interface{}{"resource": fakeResource, "authorization_servers": []string{issuer}})
+		writeJSON(w, 200, map[string]interface{}{"resource": f.resource, "authorization_servers": []string{issuer}})
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]interface{}{
@@ -270,6 +276,38 @@ func TestLoginNoBrowserPastedURL(t *testing.T) {
 	}
 	if res.Token.AccessToken == "" {
 		t.Fatal("no token")
+	}
+}
+
+func TestLoginRefusedWhenAPIDoesNotAcceptTheTokens(t *testing.T) {
+	f := newFakeServer(t)
+	f.resource = "https://mcp.example.test/mcp" // tokens would only be valid for the MCP server
+	openBrowser = func(string) error { t.Error("must not open a browser"); return nil }
+	t.Cleanup(func() { openBrowser = func(string) error { return nil } })
+
+	_, err := Login(context.Background(), LoginOptions{APIURL: f.srv.URL, Out: &bytes.Buffer{}})
+	if !errors.Is(err, ErrBrowserLoginUnsupported) {
+		t.Fatalf("expected ErrBrowserLoginUnsupported, got %v", err)
+	}
+	if f.registrations != 0 {
+		t.Fatal("no client should be registered")
+	}
+}
+
+func TestResourceIsAPI(t *testing.T) {
+	for _, c := range []struct {
+		resource, api string
+		want          bool
+	}{
+		{"https://api.cubepath.com", "https://api.cubepath.com", true},
+		{"https://api.cubepath.com/", "https://api.cubepath.com", true},
+		{"https://mcp.cubepath.com/mcp", "https://api.cubepath.com", false},
+		{"https://api.cubepath.com/mcp", "https://api.cubepath.com", false},
+		{"http://api.cubepath.com", "https://api.cubepath.com", false},
+	} {
+		if got := ResourceIsAPI(c.resource, c.api); got != c.want {
+			t.Errorf("ResourceIsAPI(%q, %q) = %v", c.resource, c.api, got)
+		}
 	}
 }
 

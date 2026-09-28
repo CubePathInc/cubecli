@@ -33,7 +33,7 @@ cubecli update
 ## Quick Start
 
 ```bash
-# Log in with your browser
+# Log in (asks for an API token)
 cubecli login
 
 # List your projects
@@ -48,10 +48,11 @@ cubecli <command> --help
 
 ## Authentication
 
-`cubecli login` opens your browser, you approve the access on the CubePath
-dashboard (choosing the organization and the permissions), and the session is
-stored in a profile. The access token is refreshed automatically; you stay
-logged in as long as you use the CLI at least once every 30 days.
+`cubecli login` stores your credentials in a profile. It asks for an API
+token, which you create in the dashboard at
+https://my.cubepath.com/organization/tokens. Once the CubePath API supports
+browser sign-in, the same command opens your browser instead, with no update
+needed.
 
 ```bash
 # Log in the active profile ('default' if there is none)
@@ -60,28 +61,18 @@ cubecli login
 # Log in a named profile
 cubecli login work
 
-# On a machine without a browser (e.g. over SSH): prints the URL instead
-cubecli login --no-browser
-
 # See how every profile is authenticated
 cubecli auth status
 
-# Revoke the session and remove the stored credentials
+# Remove the stored credentials
 cubecli logout work
 cubecli logout --all
 ```
 
-The consent screen only pre-selects read permissions. Tick the write
-permissions you need there, or the CLI can list resources but not create or
-change them.
+### CI and scripts
 
-Browser sessions can be disconnected at any time from the dashboard, under
-Account > Connected apps (https://my.cubepath.com/account/connections).
-
-### API tokens (CI and scripts)
-
-For non-interactive use, create an API token in the dashboard and either store
-it in a profile or pass it through the environment:
+For non-interactive use, store a token in a profile or pass it through the
+environment:
 
 ```bash
 # Store a token in a profile (prompts for it and validates it)
@@ -148,7 +139,7 @@ Each profile holds the credentials of one organization. Log in once per
 organization and switch between them.
 
 ```bash
-# Log in a new profile (choose the organization on the consent screen)
+# Log in a new profile (one API token per organization)
 cubecli login work
 cubecli login personal
 

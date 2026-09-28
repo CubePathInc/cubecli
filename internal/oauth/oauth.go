@@ -7,6 +7,7 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -30,6 +31,21 @@ const (
 var callbackPorts = []int{38271, 38272, 38273, 38274, 38275}
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
+
+// ErrBrowserLoginUnsupported means the API does not accept browser-login
+// tokens: its protected resource metadata does not name the API itself.
+var ErrBrowserLoginUnsupported = errors.New("browser login is not available for this API yet")
+
+// ResourceIsAPI reports whether an OAuth resource identifier is the API at
+// apiURL, i.e. whether tokens issued for it are accepted by the API.
+func ResourceIsAPI(resource, apiURL string) bool {
+	r, err1 := url.Parse(resource)
+	a, err2 := url.Parse(apiURL)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return r.Scheme == a.Scheme && strings.EqualFold(r.Host, a.Host) && strings.Trim(r.Path, "/") == ""
+}
 
 // ProtectedResource is the RFC 9728 document served by the API.
 type ProtectedResource struct {
@@ -87,10 +103,10 @@ func (e *Error) Error() string {
 func Discover(ctx context.Context, apiURL string) (*ProtectedResource, *ServerMetadata, error) {
 	var pr ProtectedResource
 	if err := getJSON(ctx, strings.TrimRight(apiURL, "/")+"/.well-known/oauth-protected-resource", &pr); err != nil {
-		return nil, nil, fmt.Errorf("this API does not support browser login (%w); use 'cubecli login --token'", err)
+		return nil, nil, ErrBrowserLoginUnsupported
 	}
-	if len(pr.AuthorizationServers) == 0 || pr.Resource == "" {
-		return nil, nil, fmt.Errorf("this API does not advertise an authorization server; use 'cubecli login --token'")
+	if len(pr.AuthorizationServers) == 0 || pr.Resource == "" || !ResourceIsAPI(pr.Resource, apiURL) {
+		return nil, nil, ErrBrowserLoginUnsupported
 	}
 
 	issuer := strings.TrimRight(pr.AuthorizationServers[0], "/")

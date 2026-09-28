@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -21,6 +22,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// tokensPage is where API tokens are created in the dashboard.
+const tokensPage = "https://my.cubepath.com/organization/tokens"
+
 // NewCmd returns the `auth` command group.
 func NewCmd() *cobra.Command {
 	authCmd := &cobra.Command{
@@ -35,22 +39,23 @@ func NewCmd() *cobra.Command {
 func NewLoginCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login [profile]",
-		Short: "Log in to CubePath in the browser and store the session in a profile",
-		Long: `Log in to CubePath through your browser and store the session in a profile.
+		Short: "Log in to CubePath and store the credentials in a profile",
+		Long: `Log in to CubePath and store the credentials in a profile.
 
-Each profile holds the session of one organization, chosen on the consent
-screen. Log in once per organization and switch with 'cubecli profile use'
-or '--profile'.
+cubecli login signs you in through the browser when the CubePath API supports
+it; otherwise it asks for an API token, which you create at
+https://my.cubepath.com/organization/tokens.
+
+Each profile holds the credentials of one organization. Log in once per
+organization and switch with 'cubecli profile use' or '--profile'.
 
 Without a profile name, the active profile is used ('default' if none).
 
-For CI and other non-interactive use, store an API token instead with
-'--token', or set CUBE_API_TOKEN.`,
+For CI and other non-interactive use, pass '--token' or set CUBE_API_TOKEN.`,
 		Example: `  cubecli login
   cubecli login work
   cubecli login staging --api-url https://api.staging.cubepath.com
-  cubecli login --no-browser      # over SSH, no local browser
-  cubecli login ci --token        # store an API token`,
+  cubecli login ci --token        # always use an API token`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, err := loginProfileName(cmd, args)
@@ -69,8 +74,8 @@ For CI and other non-interactive use, store an API token instead with
 		},
 	}
 	cmd.Flags().String("api-url", "", "API URL for this profile (kept from the existing profile if omitted)")
-	cmd.Flags().Bool("token", false, "Store an API token instead of logging in with the browser")
-	cmd.Flags().Bool("no-browser", false, "Print the login URL instead of opening a browser")
+	cmd.Flags().Bool("token", false, "Use an API token instead of the browser sign-in")
+	cmd.Flags().Bool("no-browser", false, "For browser sign-in, print the URL instead of opening a browser")
 	cmd.Flags().Bool("use", false, "Make this the active profile")
 	cmd.Flags().Bool("skip-skills", false, "Do not offer to install the CubePath skills for AI agents")
 	cmd.Flags().Bool("skip-mcp", false, "Do not offer to add the CubePath MCP server to AI agents")
@@ -129,6 +134,12 @@ func BrowserLogin(cmd *cobra.Command, name, apiURL string, noBrowser, makeActive
 			})
 		},
 	})
+	if errors.Is(err, oauth.ErrBrowserLoginUnsupported) {
+		if cmdutil.IsJSON(cmd) || !cmdutil.StdinIsTerminal() {
+			return fmt.Errorf("browser login is not available yet: run 'cubecli login %s --token' with an API token from %s", name, tokensPage)
+		}
+		return TokenLogin(cmd, name, apiURL, makeActive)
+	}
 	if err != nil {
 		return err
 	}
@@ -219,6 +230,7 @@ func TokenLogin(cmd *cobra.Command, name, apiURL string, makeActive bool) error 
 		apiURL = existing.APIURL
 	}
 
+	fmt.Fprintf(cmd.ErrOrStderr(), "Create an API token at %s\n", tokensPage)
 	fmt.Fprintf(cmd.ErrOrStderr(), "Enter the CubePath API token for profile %q: ", name)
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
@@ -477,6 +489,9 @@ func newStatusCmd() *cobra.Command {
 					r.Access = "read-only"
 					if hasWriteScope(p.OAuth.Scopes) {
 						r.Access = "read/write"
+					}
+					if !oauth.ResourceIsAPI(p.OAuth.Resource, r.APIURL) {
+						r.Access = "unusable: log in again with --token"
 					}
 				}
 				rows = append(rows, r)
