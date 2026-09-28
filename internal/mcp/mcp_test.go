@@ -131,7 +131,10 @@ func fakeBinaries(t *testing.T, names ...string) string {
 	log := filepath.Join(dir, "calls.log")
 	for _, n := range names {
 		script := "#!/bin/sh\necho \"" + n + " $*\" >> " + log + "\n" +
-			"if [ \"$2\" = get ]; then exit 1; fi\n"
+			"if [ \"$2\" = get ]; then\n" +
+			"  if [ -f " + dir + "/claude-user ]; then echo '  Scope: User config (available in all your projects)'; exit 0; fi\n" +
+			"  if [ -f " + dir + "/claude-local ]; then echo '  Scope: Local config (private to you in this project)'; exit 0; fi\n" +
+			"  exit 1\nfi\n"
 		if err := os.WriteFile(filepath.Join(dir, n), []byte(script), 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -201,6 +204,22 @@ func TestGeminiSettings(t *testing.T) {
 	_ = os.WriteFile(settings, []byte(`{"mcpServers":{"cp":{"httpUrl":"`+testURL+`"}}}`), 0644)
 	if ok, _ := gemini.Configured(testURL); !ok {
 		t.Fatal("a server with the same URL under another name counts as configured")
+	}
+}
+
+func TestClaudeCodeLocalScopeIsNotEnough(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	log := fakeBinaries(t, "claude")
+	dir := filepath.Dir(log)
+	claude, _ := ClientByID("claude")
+
+	_ = os.WriteFile(filepath.Join(dir, "claude-local"), nil, 0644)
+	if ok, _ := claude.Configured(testURL); ok {
+		t.Fatal("a local-scope entry only works in one project")
+	}
+	_ = os.WriteFile(filepath.Join(dir, "claude-user"), nil, 0644)
+	if ok, _ := claude.Configured(testURL); !ok {
+		t.Fatal("a user-scope entry counts as configured")
 	}
 }
 

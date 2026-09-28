@@ -84,7 +84,12 @@ var Clients = []Client{
 		NextStep: "In Claude Code, run /mcp and choose cubepath to authorize it in the browser.",
 		detect:   func() bool { return hasBinary("claude") },
 		configured: func(string) (bool, error) {
-			return exec.Command("claude", "mcp", "get", ServerName).Run() == nil, nil
+			// Run outside any project: a local or project entry only applies there,
+			// and only the user-scope one makes it available everywhere.
+			cmd := exec.Command("claude", "mcp", "get", ServerName)
+			cmd.Dir = os.TempDir()
+			out, err := cmd.Output()
+			return err == nil && strings.Contains(string(out), "Scope: User config"), nil
 		},
 		install: func(ctx context.Context, url string) error {
 			return run(ctx, "claude", "mcp", "add", "--transport", "http", "--scope", "user", ServerName, url)

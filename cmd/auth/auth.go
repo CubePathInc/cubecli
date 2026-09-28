@@ -200,14 +200,14 @@ func BrowserLogin(cmd *cobra.Command, name, apiURL string, noBrowser, makeActive
 		})
 	}
 
-	who := creds.Email
-	if who == "" {
-		who = "CubePath"
+	switch {
+	case creds.Email != "" && creds.Organization != "":
+		output.PrintSuccess(fmt.Sprintf("Logged in as %s (%s), profile %q", creds.Email, creds.Organization, name))
+	case creds.Email != "":
+		output.PrintSuccess(fmt.Sprintf("Logged in as %s, profile %q", creds.Email, name))
+	default:
+		output.PrintSuccess(fmt.Sprintf("Logged in, profile %q", name))
 	}
-	if creds.Organization != "" {
-		who = fmt.Sprintf("%s (%s)", who, creds.Organization)
-	}
-	output.PrintSuccess(fmt.Sprintf("Logged in as %s, profile %q", who, name))
 	if !hasWriteScope(creds.Scopes) {
 		output.PrintWarning("Read-only access granted. To create or change resources, run 'cubecli login " + name + "' again and allow write permissions.")
 	}
