@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CubePathInc/cubecli/internal/api"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -72,6 +71,10 @@ func keyListCmd() *cobra.Command {
 						names = append(names, b.Name)
 					}
 					scope = strings.Join(names, ", ")
+					if len(names) == 0 {
+						// Scoped to buckets that have all been deleted: the key reaches nothing.
+						scope = "none (buckets deleted)"
+					}
 				}
 				expires := "never"
 				if k.ExpiresAt != nil && *k.ExpiresAt != "" {
@@ -249,42 +252,6 @@ func keyDeleteCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 	return cmd
-}
-
-// resolveBuckets maps bucket names or uuids to uuids, listing the buckets at most once.
-func resolveBuckets(client *api.Client, refs []string) ([]string, error) {
-	var byName map[string]string
-	uuids := make([]string, 0, len(refs))
-	for _, ref := range refs {
-		ref = strings.TrimSpace(ref)
-		if isUUID(ref) {
-			uuids = append(uuids, ref)
-			continue
-		}
-		if byName == nil {
-			resp, err := client.Get("/object-storage/buckets")
-			if err != nil {
-				return nil, err
-			}
-			var buckets []struct {
-				UUID string `json:"uuid"`
-				Name string `json:"name"`
-			}
-			if err := json.Unmarshal(resp, &buckets); err != nil {
-				return nil, fmt.Errorf("failed to parse response: %w", err)
-			}
-			byName = make(map[string]string, len(buckets))
-			for _, b := range buckets {
-				byName[b.Name] = b.UUID
-			}
-		}
-		uuid, ok := byName[ref]
-		if !ok {
-			return nil, fmt.Errorf("bucket %q not found", ref)
-		}
-		uuids = append(uuids, uuid)
-	}
-	return uuids, nil
 }
 
 var daysRe = regexp.MustCompile(`^(\d+)d$`)

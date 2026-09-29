@@ -267,7 +267,7 @@ take their uuid or name.
 
 ```bash
 cubecli s3 bucket create photos --tier ia
-cubecli s3 key create --name backups --tier ia --output env > .env      # or rclone, aws
+cubecli s3 key create --name backups --tier ia --output env > .env.cubepath-storage   # new file; or rclone, aws
 aws s3 ls s3://photos --endpoint-url https://eu.cubestorage.io --region eu
 ```
 

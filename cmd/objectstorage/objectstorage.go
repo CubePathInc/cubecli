@@ -280,26 +280,46 @@ func usageCmd() *cobra.Command {
 
 // resolveBucket returns the uuid of a bucket given its uuid or its name.
 func resolveBucket(client *api.Client, ref string) (string, error) {
-	if isUUID(ref) {
-		return ref, nil
-	}
-	resp, err := client.Get("/object-storage/buckets")
+	uuids, err := resolveBuckets(client, []string{ref})
 	if err != nil {
 		return "", err
+	}
+	return uuids[0], nil
+}
+
+// resolveBuckets maps bucket names or uuids to uuids with a single list call.
+// Names win over uuids: a bucket may be named like a uuid (lowercase hex and
+// hyphens), so a uuid-shaped ref is only taken as a uuid when no bucket has that name.
+func resolveBuckets(client *api.Client, refs []string) ([]string, error) {
+	resp, err := client.Get("/object-storage/buckets")
+	if err != nil {
+		return nil, err
 	}
 	var buckets []struct {
 		UUID string `json:"uuid"`
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(resp, &buckets); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
+		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
+	byName := make(map[string]string, len(buckets))
 	for _, b := range buckets {
-		if b.Name == ref {
-			return b.UUID, nil
-		}
+		byName[b.Name] = b.UUID
 	}
-	return "", fmt.Errorf("bucket %q not found", ref)
+	uuids := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if uuid, ok := byName[ref]; ok {
+			uuids = append(uuids, uuid)
+			continue
+		}
+		if isUUID(ref) {
+			uuids = append(uuids, ref)
+			continue
+		}
+		return nil, fmt.Errorf("bucket %q not found", ref)
+	}
+	return uuids, nil
 }
 
 // resolveKey returns the uuid of an access key given its uuid, access key ID or name.

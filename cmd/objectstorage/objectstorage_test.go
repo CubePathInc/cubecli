@@ -22,6 +22,9 @@ const (
 	bucketUUID = "11111111-2222-4333-8444-555555555555"
 	otherUUID  = "66666666-7777-4888-9999-000000000000"
 	keyUUID    = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	// uuidNamed is a valid bucket name that is also uuid-shaped.
+	uuidNamed     = "12345678-1234-1234-1234-123456789012"
+	uuidNamedUUID = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
 )
 
 type recorded struct {
@@ -52,9 +55,11 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets":
 		_, _ = w.Write([]byte(`[{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"name":"Infrequent Access"}},
-			{"uuid":"` + otherUUID + `","name":"backups","status":"active","tier":{"name":"Infrequent Access"}}]`))
+			{"uuid":"` + otherUUID + `","name":"backups","status":"active","tier":{"name":"Infrequent Access"}},
+			{"uuid":"` + uuidNamedUUID + `","name":"` + uuidNamed + `","status":"active","tier":{"name":"Infrequent Access"}}]`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/keys":
-		_, _ = w.Write([]byte(`[{"uuid":"` + keyUUID + `","name":"web","access_key_id":"CP7Q2M9XK4B1N8R5T3W6","permission":"read_only","bucket_scope":null,"status":"active"}]`))
+		_, _ = w.Write([]byte(`[{"uuid":"` + keyUUID + `","name":"web","access_key_id":"CP7Q2M9XK4B1N8R5T3W6","permission":"read_only","bucket_scope":null,"status":"active"},
+			{"uuid":"` + otherUUID + `","name":"orphan","access_key_id":"CPORPHANKEY000000000","permission":"read_only","bucket_scope":[],"status":"active"}]`))
 	case r.Method == http.MethodPost && r.URL.Path == "/object-storage/keys":
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"detail":"Access key created. Copy the secret now: it will not be shown again.","uuid":"` + keyUUID + `","name":"My Backups","access_key_id":"CP7Q2M9XK4B1N8R5T3W6","secret_access_key":"s3cr3t","permission":"read_write","bucket_scope":null,"region":"eu","endpoint":"https://eu.cubestorage.io","status":"pending","expires_at":null}`))
@@ -176,6 +181,33 @@ func TestBucketGetResolvesName(t *testing.T) {
 	}
 	if got := last(reqs).Path; got != "/object-storage/buckets/"+otherUUID {
 		t.Fatalf("path %s", got)
+	}
+}
+
+func TestBucketGetUUIDShapedNameWinsOverUUID(t *testing.T) {
+	_, reqs, err := run(t, "s3", "bucket", "get", uuidNamed, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := last(reqs).Path; got != "/object-storage/buckets/"+uuidNamedUUID {
+		t.Fatalf("path %s", got)
+	}
+	_, reqs, err = run(t, "s3", "bucket", "get", bucketUUID, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := last(reqs).Path; got != "/object-storage/buckets/"+bucketUUID {
+		t.Fatalf("path %s", got)
+	}
+}
+
+func TestKeyListEmptyScopeIsNotBlank(t *testing.T) {
+	out, _, err := run(t, "s3", "key", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "none (buckets deleted)") {
+		t.Fatalf("output %s", out)
 	}
 }
 
