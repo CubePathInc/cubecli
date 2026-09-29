@@ -118,7 +118,7 @@ present and future. --output prints ready-to-use credentials:
   rclone  rclone.conf remote
   aws     ~/.aws/credentials profile (with region and endpoint_url)`,
 		Example: `  cubecli s3 key create --name backups --tier ia
-  cubecli s3 key create --name web --tier ia --bucket photos --permission read_only --output env > .env
+  cubecli s3 key create --name web --tier ia --bucket photos --permission read_only --output env > .env.cubepath-storage
   cubecli s3 key create --name nightly --tier ia --expires-in 720h --output rclone >> ~/.config/rclone/rclone.conf`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
