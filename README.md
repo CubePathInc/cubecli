@@ -252,6 +252,25 @@ a profile called `default` the first time you run CubeCLI.
 | `cubecli cdn metrics top-urls\|top-countries\|top-asn` | Top analytics |
 | `cubecli cdn plan list` | List available plans |
 
+### Object Storage
+
+S3-compatible buckets (alias `s3`). Tiers take a slug, a uuid or `ia`; buckets
+take their uuid or name.
+
+| Command | Description |
+|---------|-------------|
+| `cubecli objectstorage tiers` | Tiers with endpoint, prices and free tier |
+| `cubecli objectstorage bucket list\|get\|create\|update\|delete` | Bucket management (`create <name> --tier ia`, `delete --purge` also deletes the content) |
+| `cubecli objectstorage bucket cdn connect\|disconnect <bucket>` | Serve a bucket publicly through a CDN zone |
+| `cubecli objectstorage key list\|create\|delete` | Access keys; the secret is shown once |
+| `cubecli objectstorage usage [--period YYYY-MM]` | Month usage and cost per tier and bucket |
+
+```bash
+cubecli s3 bucket create photos --tier ia
+cubecli s3 key create --name backups --tier ia --output env > .env      # or rclone, aws
+aws s3 ls s3://photos --endpoint-url https://eu.cubestorage.io --region eu
+```
+
 ## Global Flags
 
 ```

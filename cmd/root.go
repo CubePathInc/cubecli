@@ -18,6 +18,7 @@ import (
 	mcpcmd "github.com/CubePathInc/cubecli/cmd/mcp"
 	"github.com/CubePathInc/cubecli/cmd/natgateway"
 	"github.com/CubePathInc/cubecli/cmd/network"
+	"github.com/CubePathInc/cubecli/cmd/objectstorage"
 	"github.com/CubePathInc/cubecli/cmd/profile"
 	"github.com/CubePathInc/cubecli/cmd/project"
 	skillscmd "github.com/CubePathInc/cubecli/cmd/skills"
@@ -103,6 +104,7 @@ func init() {
 		lb.NewCmd(),
 		cdn.NewCmd(),
 		kubernetes.NewCmd(),
+		objectstorage.NewCmd(),
 		skillscmd.NewCmd(),
 		mcpcmd.NewCmd(),
 	)
