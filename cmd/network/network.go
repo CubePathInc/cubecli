@@ -225,6 +225,8 @@ func NewCmd() *cobra.Command {
 	networkCmd.AddCommand(networkCreateCmd, networkListCmd, networkUpdateCmd, networkDeleteCmd)
 
 	addRouteCmd(networkCmd)
+	addBGPPeerCmd(networkCmd)
+	networkCmd.AddCommand(cmdutil.MoveProjectCmd("network_id", "network", cmdutil.IntPath("/networks/%d/move-project", "network_id")))
 
 	return networkCmd
 }

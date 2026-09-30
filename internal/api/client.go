@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"time"
 
@@ -57,12 +58,15 @@ func (c *Client) doRequest(method, path string, body interface{}) (json.RawMessa
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
 	}
+	return c.doRaw(method, path, "application/json", data)
+}
 
+func (c *Client) doRaw(method, path, contentType string, data []byte) (json.RawMessage, error) {
 	token, err := c.Auth.Token()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.send(method, path, data, token)
+	resp, err := c.send(method, path, contentType, data, token)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +75,7 @@ func (c *Client) doRequest(method, path string, body interface{}) (json.RawMessa
 		// once and retry. API tokens are not refreshable and keep the 401.
 		if fresh, rerr := c.Auth.Refresh(token); rerr == nil {
 			resp.Body.Close()
-			if resp, err = c.send(method, path, data, fresh); err != nil {
+			if resp, err = c.send(method, path, contentType, data, fresh); err != nil {
 				return nil, err
 			}
 		} else if !errors.Is(rerr, errNotRefreshable) {
@@ -97,7 +101,7 @@ func (c *Client) doRequest(method, path string, body interface{}) (json.RawMessa
 	return json.RawMessage(respBody), nil
 }
 
-func (c *Client) send(method, path string, data []byte, token string) (*http.Response, error) {
+func (c *Client) send(method, path, contentType string, data []byte, token string) (*http.Response, error) {
 	var reqBody io.Reader
 	if data != nil {
 		reqBody = bytes.NewReader(data)
@@ -108,7 +112,7 @@ func (c *Client) send(method, path string, data []byte, token string) (*http.Res
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("User-Agent", fmt.Sprintf("CubeCLI/%s", version.Version))
 
 	resp, err := c.HTTPClient.Do(req)
@@ -136,4 +140,21 @@ func (c *Client) Patch(path string, body interface{}) (json.RawMessage, error) {
 
 func (c *Client) Delete(path string) (json.RawMessage, error) {
 	return c.doRequest(http.MethodDelete, path, nil)
+}
+
+// PostFile uploads one file as multipart/form-data under the form field `field`.
+func (c *Client) PostFile(path, field, fileName string, content []byte) (json.RawMessage, error) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	part, err := w.CreateFormFile(field, fileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build upload: %w", err)
+	}
+	if _, err := part.Write(content); err != nil {
+		return nil, fmt.Errorf("failed to build upload: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("failed to build upload: %w", err)
+	}
+	return c.doRaw(http.MethodPost, path, w.FormDataContentType(), buf.Bytes())
 }

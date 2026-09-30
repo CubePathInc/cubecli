@@ -60,3 +60,25 @@ func TestStaticTokenKeepsUnauthorized(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestPostFileSendsMultipart(t *testing.T) {
+	var ctype, field, name, content string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctype = r.Header.Get("Content-Type")
+		if f, h, err := r.FormFile("file"); err == nil {
+			buf := make([]byte, 64)
+			n, _ := f.Read(buf)
+			field, name, content = "file", h.Filename, string(buf[:n])
+		}
+		_, _ = w.Write([]byte(`{"imported":1}`))
+	}))
+	defer srv.Close()
+
+	out, err := NewClient(srv.URL, "tok").PostFile("/dns/zones/z/import", "file", "z.zone", []byte("www A 1.2.3.4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != `{"imported":1}` || field != "file" || name != "z.zone" || content != "www A 1.2.3.4" {
+		t.Fatalf("out=%s ctype=%s field=%s name=%s content=%q", out, ctype, field, name, content)
+	}
+}

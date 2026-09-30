@@ -613,6 +613,7 @@ func NewCmd() *cobra.Command {
 	addReinstallCmd(baremetalCmd)
 	addMonitoringCmd(baremetalCmd)
 	addModelCmd(baremetalCmd)
+	addManageCmds(baremetalCmd)
 
 	return baremetalCmd
 }

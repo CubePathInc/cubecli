@@ -385,6 +385,8 @@ func NewCmd() *cobra.Command {
 	addWAFCmd(cdnCmd)
 	addMetricsCmd(cdnCmd)
 	addPlanCmd(cdnCmd)
+	addCacheCmd(cdnCmd)
+	addTokenAuthCmd(cdnCmd)
 
 	return cdnCmd
 }

@@ -220,6 +220,6 @@ func NewCmd() *cobra.Command {
 
 	projectDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
-	projectCmd.AddCommand(projectCreateCmd, projectListCmd, projectShowCmd, projectDeleteCmd)
+	projectCmd.AddCommand(projectCreateCmd, projectListCmd, projectShowCmd, projectDeleteCmd, updateCmd())
 	return projectCmd
 }

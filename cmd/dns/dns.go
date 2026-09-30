@@ -121,6 +121,14 @@ func NewCmd() *cobra.Command {
 			client := cmdutil.GetClient(cmd)
 
 			projectID, _ := cmd.Flags().GetInt("project")
+			zoneFile, _ := cmd.Flags().GetString("zone-file")
+			scan, _ := cmd.Flags().GetBool("scan")
+			if zoneFile != "" && scan {
+				return fmt.Errorf("use either --zone-file or --scan, not both")
+			}
+			if zoneFile != "" || scan {
+				return createFromSource(cmd, args[0], projectID, zoneFile, scan)
+			}
 
 			body := map[string]interface{}{
 				"domain":     args[0],
@@ -285,6 +293,8 @@ func NewCmd() *cobra.Command {
 
 	zoneCreateCmd.Flags().IntP("project", "p", 0, "Project ID")
 	zoneCreateCmd.MarkFlagRequired("project")
+	zoneCreateCmd.Flags().String("zone-file", "", "Import records from this BIND zone file")
+	zoneCreateCmd.Flags().Bool("scan", false, "Import the records currently served by public DNS")
 
 	zoneDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
@@ -296,6 +306,8 @@ func NewCmd() *cobra.Command {
 
 	addRecordCmd(dnsCmd)
 	addSOACmd(dnsCmd)
+	addHealthCheckCmd(dnsCmd)
+	addZoneExtraCmds(zoneCmd, dnsCmd)
 
 	return dnsCmd
 }

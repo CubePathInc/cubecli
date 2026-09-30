@@ -4,17 +4,21 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/CubePathInc/cubecli/cmd/alert"
 	authcmd "github.com/CubePathInc/cubecli/cmd/auth"
 	"github.com/CubePathInc/cubecli/cmd/availabilitygroup"
 	"github.com/CubePathInc/cubecli/cmd/baremetal"
 	"github.com/CubePathInc/cubecli/cmd/cdn"
 	configcmd "github.com/CubePathInc/cubecli/cmd/config"
 	"github.com/CubePathInc/cubecli/cmd/ddosattack"
+	"github.com/CubePathInc/cubecli/cmd/ddosmitigation"
 	"github.com/CubePathInc/cubecli/cmd/dns"
+	"github.com/CubePathInc/cubecli/cmd/firewall"
 	"github.com/CubePathInc/cubecli/cmd/floatingip"
 	"github.com/CubePathInc/cubecli/cmd/kubernetes"
 	"github.com/CubePathInc/cubecli/cmd/lb"
 	"github.com/CubePathInc/cubecli/cmd/location"
+	"github.com/CubePathInc/cubecli/cmd/manageddatabase"
 	mcpcmd "github.com/CubePathInc/cubecli/cmd/mcp"
 	"github.com/CubePathInc/cubecli/cmd/natgateway"
 	"github.com/CubePathInc/cubecli/cmd/network"
@@ -23,6 +27,7 @@ import (
 	"github.com/CubePathInc/cubecli/cmd/project"
 	skillscmd "github.com/CubePathInc/cubecli/cmd/skills"
 	"github.com/CubePathInc/cubecli/cmd/sshkey"
+	"github.com/CubePathInc/cubecli/cmd/transcoder"
 	"github.com/CubePathInc/cubecli/cmd/vps"
 	"github.com/CubePathInc/cubecli/internal/api"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
@@ -100,11 +105,16 @@ func init() {
 		availabilitygroup.NewCmd(),
 		floatingip.NewCmd(),
 		ddosattack.NewCmd(),
+		ddosmitigation.NewCmd(),
+		firewall.NewCmd(),
 		dns.NewCmd(),
 		lb.NewCmd(),
 		cdn.NewCmd(),
 		kubernetes.NewCmd(),
 		objectstorage.NewCmd(),
+		manageddatabase.NewCmd(),
+		transcoder.NewCmd(),
+		alert.NewCmd(),
 		skillscmd.NewCmd(),
 		mcpcmd.NewCmd(),
 	)

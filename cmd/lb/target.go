@@ -184,6 +184,6 @@ func addTargetCmd(parent *cobra.Command) {
 	// Flags for remove
 	targetRemoveCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
-	targetCmd.AddCommand(targetAddCmd, targetUpdateCmd, targetRemoveCmd, targetDrainCmd)
+	targetCmd.AddCommand(targetAddCmd, targetUpdateCmd, targetRemoveCmd, targetDrainCmd, targetBatchCmd())
 	parent.AddCommand(targetCmd)
 }

@@ -402,6 +402,7 @@ func NewCmd() *cobra.Command {
 	addTargetCmd(lbCmd)
 	addHealthCheckCmd(lbCmd)
 	addPlanCmd(lbCmd)
+	addManageCmds(lbCmd)
 
 	return lbCmd
 }
