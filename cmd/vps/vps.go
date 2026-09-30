@@ -637,6 +637,7 @@ func NewCmd() *cobra.Command {
 	addTemplateCmd(vpsCmd)
 	addBackupCmd(vpsCmd)
 	addISOCmd(vpsCmd)
+	addManageCmds(vpsCmd)
 
 	return vpsCmd
 }

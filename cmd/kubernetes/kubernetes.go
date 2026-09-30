@@ -30,6 +30,8 @@ func NewCmd() *cobra.Command {
 		kubeconfigCmd(),
 		moveCmd(),
 		loadbalancersCmd(),
+		protectionCmd(),
+		metricsCmd(),
 		newNodePoolCmd(),
 		newAddonCmd(),
 	)

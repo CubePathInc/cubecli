@@ -174,6 +174,13 @@ a profile called `default` the first time you run CubeCLI.
 
 ## Commands
 
+### Account
+
+| Command | Description |
+|---------|-------------|
+| `cubecli project list\|show\|create\|update\|delete` | Projects |
+| `cubecli ssh-key list\|create\|update\|delete` | SSH keys |
+
 ### Compute
 
 | Command | Description |
@@ -191,6 +198,12 @@ a profile called `default` the first time you run CubeCLI.
 | `cubecli vps iso list\|mount\|unmount <id>` | ISO management |
 | `cubecli vps plan list` | List available plans |
 | `cubecli vps template list` | List OS templates |
+| `cubecli vps protection <id> --enable\|--disable` | Destruction protection |
+| `cubecli vps move-project <id> --project <id>` | Move to another project |
+| `cubecli vps ssh-key add\|remove <id> <key_id>` | SSH keys of a VPS |
+| `cubecli vps network attach\|detach <id>` | Private network |
+| `cubecli vps console <id>` | VNC console session |
+| `cubecli availability-group list\|show\|create\|delete\|add-vps\|remove-vps\|move-project` | Availability groups |
 
 ### Baremetal
 
@@ -207,17 +220,36 @@ a profile called `default` the first time you run CubeCLI.
 | `cubecli baremetal reset-bmc <id>` | Reset the BMC |
 | `cubecli baremetal ipmi <id>` | Create IPMI proxy session |
 | `cubecli baremetal model list` | List available models |
+| `cubecli baremetal os <id>` | Installable OS and disk layouts |
+| `cubecli baremetal kvm <id>` | KVM console URL and credentials |
+| `cubecli baremetal protection\|move-project <id>` | Protection and project moves |
+| `cubecli baremetal ssh-key add\|remove <id> <key_id>` | SSH keys of a server |
+| `cubecli baremetal network attach\|detach <id>` | Private network |
 
 ### Networking
 
 | Command | Description |
 |---------|-------------|
 | `cubecli network create\|list\|update\|delete` | Private networks |
+| `cubecli network route list\|create\|delete` | Static routes |
+| `cubecli network bgp-peer list\|create\|update\|delete` | BGP sessions (dynamic routes) |
+| `cubecli network move-project <id>` | Move a network to another project |
+| `cubecli firewall group list\|show\|create\|update\|delete` | VPS firewall groups |
+| `cubecli firewall assign <vps_id> --group <id>` | Set the firewall groups of a VPS |
+| `cubecli nat-gateway plans\|list\|show\|create\|update\|delete\|resize\|move\|protection` | NAT gateways |
 | `cubecli floating-ip list\|acquire\|release` | Floating IP management |
 | `cubecli floating-ip assign\|unassign <address>` | IP assignment |
 | `cubecli floating-ip reverse-dns <address>` | Reverse DNS |
 | `cubecli location list` | List available locations |
 | `cubecli ddos-attack list` | View DDoS attack history |
+| `cubecli ddos-attack details\|traffic <id>` | Attack details and traffic |
+| `cubecli ddos-mitigation ips` | Premium-protected IPs |
+| `cubecli ddos-mitigation profile show\|update\|delete <ip>` | Protection profile of an IP |
+| `cubecli ddos-mitigation profile countries\|asns\|prefix-lists <ip>` | Filters of a profile (`set-*` to replace) |
+| `cubecli ddos-mitigation rule list\|create\|delete\|delete-matching` | Edge firewall rules |
+| `cubecli ddos-mitigation prefix-list list\|create\|delete\|entries\|add-entry\|remove-entry` | Prefix lists |
+| `cubecli ddos-mitigation countries\|asns` | Geo and ASN catalogs |
+| `cubecli ddos-mitigation traffic protected-ips\|capture\|stats` | Traffic seen at the edge |
 
 ### DNS
 
@@ -227,6 +259,11 @@ a profile called `default` the first time you run CubeCLI.
 | `cubecli dns zone verify\|scan <uuid>` | Zone verification & import |
 | `cubecli dns record list\|create\|update\|delete` | Record management |
 | `cubecli dns soa show\|update <uuid>` | SOA configuration |
+| `cubecli dns zone create <domain> --zone-file <file>\|--scan` | Create and fill a zone |
+| `cubecli dns zone import <uuid> <file>` | Import a BIND zone file |
+| `cubecli dns zone move-project <uuid>` | Move a zone to another project |
+| `cubecli dns health-check list\|show\|set\|delete` | Failover health checks |
+| `cubecli dns regions` | GeoDNS regions |
 
 ### Load Balancers
 
@@ -238,6 +275,8 @@ a profile called `default` the first time you run CubeCLI.
 | `cubecli lb target add\|update\|remove\|drain` | Target management |
 | `cubecli lb health-check configure\|delete` | Health check config |
 | `cubecli lb plan list` | List available plans |
+| `cubecli lb target add-batch <uuid> <listener>` | Add up to 50 targets at once |
+| `cubecli lb protection\|move-project <uuid>` | Protection and project moves |
 
 ### CDN
 
@@ -251,6 +290,8 @@ a profile called `default` the first time you run CubeCLI.
 | `cubecli cdn metrics summary\|requests\|bandwidth\|cache` | Analytics |
 | `cubecli cdn metrics top-urls\|top-countries\|top-asn` | Top analytics |
 | `cubecli cdn plan list` | List available plans |
+| `cubecli cdn cache purge\|purges <uuid>` | Purge the edge cache and follow it |
+| `cubecli cdn token-auth enable\|disable\|rotate-secret\|sign-url` | Signed URLs |
 
 ### Object Storage
 
@@ -273,6 +314,54 @@ aws s3 ls s3://photos --endpoint-url https://eu.cubestorage.io --region eu
 Buckets are private. To serve one publicly, add it as the origin of a CDN zone:
 `cubecli cdn origin create <zone_uuid> --name photos --bucket photos`. Deleting that
 origin disconnects the bucket.
+
+### Kubernetes
+
+| Command | Description |
+|---------|-------------|
+| `cubecli kubernetes versions\|plans` | Versions and plans |
+| `cubecli kubernetes list\|show\|create\|update\|delete` | Cluster management |
+| `cubecli kubernetes kubeconfig\|move\|loadbalancers <uuid>` | Access and placement |
+| `cubecli kubernetes protection <uuid>` | Destruction protection |
+| `cubecli kubernetes metrics <uuid> [--node <name>]` | Cluster or node health metrics |
+| `cubecli kubernetes node-pool ...` / `addon ...` | Node pools and addons |
+
+### Managed Databases
+
+MySQL, PostgreSQL and Valkey (alias `mdb`). Plans are priced per node.
+
+| Command | Description |
+|---------|-------------|
+| `cubecli mdb plans [--engine mysql]` | Plans per location |
+| `cubecli mdb list\|show\|create\|update\|delete` | Instance management |
+| `cubecli mdb scale <uuid> --replicas N\|--plan <uuid>` | Horizontal or vertical scaling |
+| `cubecli mdb credentials\|rotate-credentials <uuid>` | Admin connection credentials |
+| `cubecli mdb config show\|set <uuid>` | Engine parameters |
+| `cubecli mdb metrics <uuid>` | Connections, CPU, memory, replication lag |
+| `cubecli mdb database list\|create\|delete` | Logical databases |
+| `cubecli mdb user list\|create\|delete` | Database users (the password is shown once) |
+| `cubecli mdb protection <uuid>` | Destruction protection |
+
+```bash
+cubecli mdb create --name app-db --engine postgresql --version 17.5.0 --plan <plan_uuid> --project 12 --replicas 2
+cubecli mdb credentials <uuid>
+```
+
+### Cloud Alerts
+
+| Command | Description |
+|---------|-------------|
+| `cubecli alert notificator list\|show\|create\|update\|delete` | Slack, Discord or email channels |
+| `cubecli alert list\|show\|create\|update\|delete` | Metric alerts on VPS, baremetal or availability groups |
+| `cubecli alert history <id>` | When an alert fired and recovered |
+
+### Video Transcoder
+
+| Command | Description |
+|---------|-------------|
+| `cubecli transcoder create` | Submit a job (URL or S3 source, S3 destination) |
+| `cubecli transcoder batch --file <json>` | Submit up to 1000 jobs |
+| `cubecli transcoder list\|show\|outputs\|cancel` | Follow jobs and their files |
 
 ## Global Flags
 

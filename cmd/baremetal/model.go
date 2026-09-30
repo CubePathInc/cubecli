@@ -26,7 +26,7 @@ func addModelCmd(parent *cobra.Command) {
 
 			s := output.NewSpinner("Fetching baremetal models...")
 			s.Start()
-			resp, err := client.Get("/pricing")
+			resp, err := client.Get("/baremetal/models")
 			s.Stop()
 			if err != nil {
 				return err
@@ -36,33 +36,31 @@ func addModelCmd(parent *cobra.Command) {
 				return output.PrintJSON(json.RawMessage(resp))
 			}
 
-			var pricing struct {
-				Baremetal struct {
-					Locations []struct {
-						LocationName string `json:"location_name"`
-						Description  string `json:"description"`
-						BaremetalModels []struct {
-							ModelName      string  `json:"model_name"`
-							CPU            string  `json:"cpu"`
-							RAMSize        int     `json:"ram_size"`
-							RAMType        string  `json:"ram_type"`
-							DiskSize       string  `json:"disk_size"`
-							DiskType       string  `json:"disk_type"`
-							Port           int     `json:"port"`
-							Price          float64 `json:"price"`
-							Setup          float64 `json:"setup"`
-							StockAvailable int     `json:"stock_available"`
-						} `json:"baremetal_models"`
-					} `json:"locations"`
-				} `json:"baremetal"`
+			var models struct {
+				Locations []struct {
+					LocationName string `json:"location_name"`
+					Description  string `json:"description"`
+					Models       []struct {
+						ModelName      string  `json:"model_name"`
+						CPU            string  `json:"cpu"`
+						RAMSize        int     `json:"ram_size"`
+						RAMType        string  `json:"ram_type"`
+						DiskSize       string  `json:"disk_size"`
+						DiskType       string  `json:"disk_type"`
+						Port           int     `json:"port"`
+						Price          float64 `json:"price"`
+						Setup          float64 `json:"setup"`
+						StockAvailable int     `json:"stock_available"`
+					} `json:"models"`
+				} `json:"locations"`
 			}
-			if err := json.Unmarshal(resp, &pricing); err != nil {
+			if err := json.Unmarshal(resp, &models); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
 			t := output.NewTable("Baremetal Models", []string{"Model", "CPU", "RAM", "Disk", "Port", "Price/Month", "Setup", "Location", "Available"})
-			for _, loc := range pricing.Baremetal.Locations {
-				for _, m := range loc.BaremetalModels {
+			for _, loc := range models.Locations {
+				for _, m := range loc.Models {
 					if inStock && m.StockAvailable == 0 {
 						continue
 					}
@@ -80,7 +78,7 @@ func addModelCmd(parent *cobra.Command) {
 						m.CPU,
 						fmt.Sprintf("%d GB %s", m.RAMSize, m.RAMType),
 						fmt.Sprintf("%s %s", m.DiskSize, m.DiskType),
-						fmt.Sprintf("%d Mbps", m.Port),
+						fmt.Sprintf("%d Gbps", m.Port),
 						fmt.Sprintf("$%.2f", m.Price),
 						fmt.Sprintf("$%.2f", m.Setup),
 						loc.LocationName,

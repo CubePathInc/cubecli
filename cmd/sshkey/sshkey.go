@@ -162,6 +162,6 @@ func NewCmd() *cobra.Command {
 
 	sshKeyDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
-	sshKeyCmd.AddCommand(sshKeyCreateCmd, sshKeyListCmd, sshKeyDeleteCmd)
+	sshKeyCmd.AddCommand(sshKeyCreateCmd, sshKeyListCmd, sshKeyDeleteCmd, updateCmd())
 	return sshKeyCmd
 }

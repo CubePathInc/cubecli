@@ -24,6 +24,7 @@ func NewCmd() *cobra.Command {
 		deleteCmd(),
 		addVPSCmd(),
 		removeVPSCmd(),
+		cmdutil.MoveProjectCmd("group_uuid", "availability group", cmdutil.StringPath("/vps/availability-groups/%s/move-project")),
 	)
 
 	return agCmd
