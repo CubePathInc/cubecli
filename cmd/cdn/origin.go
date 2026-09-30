@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/CubePathInc/cubecli/cmd/objectstorage"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -47,12 +48,13 @@ func addOriginCmd(parent *cobra.Command) {
 				Backup   bool   `json:"is_backup"`
 				Health   string `json:"health"`
 				Enabled  bool   `json:"enabled"`
+				Bucket   string `json:"object_storage_bucket_uuid"`
 			}
 			if err := json.Unmarshal(resp, &origins); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("CDN Origins", []string{"UUID", "Name", "Address", "Port", "Protocol", "Weight", "Priority", "Backup", "Health", "Enabled"})
+			t := output.NewTable("CDN Origins", []string{"UUID", "Name", "Address", "Port", "Protocol", "Weight", "Priority", "Backup", "Health", "Enabled", "Bucket"})
 			for _, o := range origins {
 				t.AddRow(
 					o.UUID,
@@ -65,6 +67,7 @@ func addOriginCmd(parent *cobra.Command) {
 					strconv.FormatBool(o.Backup),
 					o.Health,
 					strconv.FormatBool(o.Enabled),
+					o.Bucket,
 				)
 			}
 			t.Render()
@@ -75,7 +78,13 @@ func addOriginCmd(parent *cobra.Command) {
 	originCreateCmd := &cobra.Command{
 		Use:   "create <zone_uuid>",
 		Short: "Create a new CDN origin",
-		Args:  cobra.ExactArgs(1),
+		Long: `Create a CDN origin. An origin is either an address (--url or --address) or
+one of your Object Storage buckets (--bucket): the CDN then reads the bucket with a
+read-only key it manages, and deleting the origin disconnects the bucket. A bucket
+can be the origin of one zone at a time.`,
+		Example: `  cubecli cdn origin create <zone_uuid> --name web --url https://origin.example.com
+  cubecli cdn origin create <zone_uuid> --name photos --bucket photos`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 			zoneUUID := args[0]
@@ -93,6 +102,11 @@ func addOriginCmd(parent *cobra.Command) {
 			noVerifySSL, _ := cmd.Flags().GetBool("no-verify-ssl")
 			hostHeader, _ := cmd.Flags().GetString("host-header")
 			basePath, _ := cmd.Flags().GetString("base-path")
+			bucket, _ := cmd.Flags().GetString("bucket")
+
+			if bucket == "" && originURL == "" && address == "" {
+				return fmt.Errorf("one of --url, --address or --bucket is required")
+			}
 
 			body := map[string]interface{}{
 				"name":                 name,
@@ -103,6 +117,14 @@ func addOriginCmd(parent *cobra.Command) {
 				"health_check_path":    healthPath,
 				"verify_ssl":           !noVerifySSL,
 				"enabled":              true,
+			}
+			if bucket != "" {
+				// The API sets up the health check of a bucket origin itself.
+				if !cmd.Flags().Changed("health-path") && !cmd.Flags().Changed("no-health-check") {
+					delete(body, "health_check_enabled")
+					delete(body, "health_check_path")
+				}
+				delete(body, "verify_ssl")
 			}
 			if originURL != "" {
 				body["origin_url"] = originURL
@@ -125,7 +147,16 @@ func addOriginCmd(parent *cobra.Command) {
 
 			s := output.NewSpinner("Creating CDN origin...")
 			s.Start()
-			resp, err := client.Post(fmt.Sprintf("/cdn/zones/%s/origins", zoneUUID), body)
+			var resp json.RawMessage
+			var err error
+			if bucket != "" {
+				var bucketUUID string
+				bucketUUID, err = objectstorage.ResolveBucket(client, bucket)
+				body["object_storage_bucket_uuid"] = bucketUUID
+			}
+			if err == nil {
+				resp, err = client.Post(fmt.Sprintf("/cdn/zones/%s/origins", zoneUUID), body)
+			}
 			s.Stop()
 			if err != nil {
 				return err
@@ -139,6 +170,7 @@ func addOriginCmd(parent *cobra.Command) {
 				UUID    string `json:"uuid"`
 				Name    string `json:"name"`
 				Address string `json:"address"`
+				Bucket  string `json:"object_storage_bucket_uuid"`
 			}
 			if err := json.Unmarshal(resp, &origin); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
@@ -148,6 +180,9 @@ func addOriginCmd(parent *cobra.Command) {
 			t.AddRow("UUID", origin.UUID)
 			t.AddRow("Name", origin.Name)
 			t.AddRow("Address", origin.Address)
+			if origin.Bucket != "" {
+				t.AddRow("Bucket", origin.Bucket)
+			}
 			t.Render()
 
 			output.PrintSuccess("CDN origin created successfully")
@@ -222,7 +257,9 @@ func addOriginCmd(parent *cobra.Command) {
 	originDeleteCmd := &cobra.Command{
 		Use:   "delete <zone_uuid> <origin_uuid>",
 		Short: "Delete a CDN origin",
-		Args:  cobra.ExactArgs(2),
+		Long: `Delete a CDN origin. If the origin is an Object Storage bucket, this
+disconnects the bucket: the CDN stops reading it and its public URLs stop working.`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 			zoneUUID := args[0]
@@ -264,7 +301,11 @@ func addOriginCmd(parent *cobra.Command) {
 	originCreateCmd.Flags().Bool("no-verify-ssl", false, "Disable SSL verification")
 	originCreateCmd.Flags().String("host-header", "", "Host header override")
 	originCreateCmd.Flags().String("base-path", "", "Base path for the origin")
+	originCreateCmd.Flags().String("bucket", "", "Object Storage bucket (name or uuid) to serve through this zone")
 	originCreateCmd.MarkFlagRequired("name")
+	for _, f := range []string{"url", "address", "port", "protocol", "host-header", "no-verify-ssl"} {
+		originCreateCmd.MarkFlagsMutuallyExclusive("bucket", f)
+	}
 
 	// Origin update flags
 	originUpdateCmd.Flags().StringP("name", "n", "", "New name for the origin")

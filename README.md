@@ -261,7 +261,6 @@ take their uuid or name.
 |---------|-------------|
 | `cubecli objectstorage tiers` | Tiers with endpoint, prices and free tier |
 | `cubecli objectstorage bucket list\|get\|create\|update\|delete` | Bucket management (`create <name> --tier ia`, `delete --purge` also deletes the content) |
-| `cubecli objectstorage bucket cdn connect\|disconnect <bucket>` | Serve a bucket publicly through a CDN zone |
 | `cubecli objectstorage key list\|create\|delete` | Access keys; the secret is shown once |
 | `cubecli objectstorage usage [--period YYYY-MM]` | Month usage and cost per tier and bucket |
 
@@ -270,6 +269,10 @@ cubecli s3 bucket create photos --tier ia
 cubecli s3 key create --name backups --tier ia --output env > .env.cubepath-storage   # new file; or rclone, aws
 aws s3 ls s3://photos --endpoint-url https://eu.cubestorage.io --region eu
 ```
+
+Buckets are private. To serve one publicly, add it as the origin of a CDN zone:
+`cubecli cdn origin create <zone_uuid> --name photos --bucket photos`. Deleting that
+origin disconnects the bucket.
 
 ## Global Flags
 

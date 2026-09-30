@@ -22,7 +22,6 @@ func bucketCmd() *cobra.Command {
 		bucketCreateCmd(),
 		bucketUpdateCmd(),
 		bucketDeleteCmd(),
-		bucketCDNCmd(),
 	)
 	return cmd
 }
@@ -389,130 +388,6 @@ The bucket name stays reserved for your organization for 90 days.`,
 		},
 	}
 	cmd.Flags().Bool("purge", false, "Also delete every object and version in the bucket (the API's force delete)")
-	cmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
-	return cmd
-}
-
-// --- cdn ---
-
-func bucketCDNCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "cdn",
-		Short: "Serve a bucket publicly through the CubePath CDN",
-	}
-	cmd.AddCommand(bucketCDNConnectCmd(), bucketCDNDisconnectCmd())
-	return cmd
-}
-
-func bucketCDNConnectCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "connect <bucket>",
-		Short: "Connect a bucket to a CDN zone (creates a billable zone the first time)",
-		Long: `Connect a bucket to the CubePath CDN. The first connection creates a CDN zone
-(--zone-name and --plan required) that is billed like any CDN zone. A bucket
-that was connected before reuses its zone and ignores these flags.
-
-Traffic from the bucket to the CDN is not billed as egress; the edges' requests
-are class B requests of the bucket.`,
-		Example: `  cubecli s3 bucket cdn connect photos --zone-name photos --plan <plan>
-  cubecli s3 bucket cdn connect photos --zone-name photos --plan <plan> --custom-domain cdn.example.com`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client := cmdutil.GetClient(cmd)
-
-			body := map[string]interface{}{}
-			if v, _ := cmd.Flags().GetString("zone-name"); v != "" {
-				body["zone_name"] = v
-			}
-			if v, _ := cmd.Flags().GetString("plan"); v != "" {
-				body["plan_name"] = v
-			}
-			if v, _ := cmd.Flags().GetString("custom-domain"); v != "" {
-				body["custom_domain"] = v
-			}
-
-			s := output.NewSpinner("Connecting bucket to the CDN...")
-			s.Start()
-			uuid, err := resolveBucket(client, args[0])
-			var resp json.RawMessage
-			if err == nil {
-				resp, err = client.Post("/object-storage/buckets/"+uuid+"/cdn", body)
-			}
-			s.Stop()
-			if err != nil {
-				return err
-			}
-
-			if cmdutil.IsJSON(cmd) {
-				return output.PrintJSON(json.RawMessage(resp))
-			}
-
-			var result struct {
-				ZoneUUID     string  `json:"zone_uuid"`
-				ZoneName     string  `json:"zone_name"`
-				Domain       string  `json:"domain"`
-				CustomDomain *string `json:"custom_domain"`
-				ReusedZone   bool    `json:"reused_zone"`
-			}
-			if err := json.Unmarshal(resp, &result); err != nil || result.ZoneUUID == "" {
-				output.PrintSuccess("CDN connection started")
-				return nil
-			}
-			if result.ReusedZone {
-				output.PrintSuccess(fmt.Sprintf("CDN connection started, reusing zone %s (%s)", result.ZoneName, result.ZoneUUID))
-			} else {
-				output.PrintSuccess(fmt.Sprintf("CDN connection started, zone %s created (%s)", result.ZoneName, result.ZoneUUID))
-			}
-			output.PrintInfo(fmt.Sprintf("Public URL: https://%s/<object key>", result.Domain))
-			if result.CustomDomain != nil && *result.CustomDomain != "" {
-				output.PrintInfo(fmt.Sprintf("Custom domain: %s (point it to the zone and request SSL with 'cdn zone request-ssl')", *result.CustomDomain))
-			}
-			return nil
-		},
-	}
-	cmd.Flags().String("zone-name", "", "Name of the CDN zone to create (first connection only)")
-	cmd.Flags().String("plan", "", "CDN plan name (first connection only; see 'cdn plan list')")
-	cmd.Flags().String("custom-domain", "", "Optional custom domain for the new zone")
-	return cmd
-}
-
-func bucketCDNDisconnectCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "disconnect <bucket>",
-		Short: "Disconnect a bucket from its CDN zone (the zone is kept)",
-		Long: `Disconnect a bucket from the CDN. The CDN stops reading the bucket, but the
-zone keeps existing (and billing) with its plan, domain and rules: delete it
-with 'cdn zone delete' if it is no longer needed, or reconnect the bucket later.`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if !cmdutil.CheckForce(cmd, fmt.Sprintf("Disconnect bucket %s from the CDN? Its public URLs stop working.", args[0])) {
-				output.PrintWarning("Aborted")
-				return nil
-			}
-
-			client := cmdutil.GetClient(cmd)
-
-			s := output.NewSpinner("Disconnecting bucket from the CDN...")
-			s.Start()
-			uuid, err := resolveBucket(client, args[0])
-			var resp json.RawMessage
-			if err == nil {
-				resp, err = client.Delete("/object-storage/buckets/" + uuid + "/cdn")
-			}
-			s.Stop()
-			if err != nil {
-				return err
-			}
-
-			if cmdutil.IsJSON(cmd) {
-				return output.PrintJSON(json.RawMessage(resp))
-			}
-
-			output.PrintSuccess("CDN disconnection started")
-			output.PrintInfo("The CDN zone is kept and still billed; delete it with 'cdn zone delete' if unwanted.")
-			return nil
-		},
-	}
 	cmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 	return cmd
 }
