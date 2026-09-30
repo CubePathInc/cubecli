@@ -201,7 +201,7 @@ a profile called `default` the first time you run CubeCLI.
 | `cubecli baremetal show <id>` | Show server details |
 | `cubecli baremetal sensors <id>` | Show BMC sensor data |
 | `cubecli baremetal power start\|stop\|restart <id>` | Power management |
-| `cubecli baremetal reinstall start\|status <id>` | OS reinstallation |
+| `cubecli baremetal reinstall start\|status\|cancel <id>` | OS reinstallation |
 | `cubecli baremetal monitoring enable\|disable\|status <id>` | Monitoring |
 | `cubecli baremetal rescue <id>` | Boot into rescue mode |
 | `cubecli baremetal reset-bmc <id>` | Reset the BMC |

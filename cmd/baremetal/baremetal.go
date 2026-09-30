@@ -2,10 +2,14 @@ package baremetal
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/CubePathInc/cubecli/internal/api"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -305,34 +309,59 @@ func NewCmd() *cobra.Command {
 
 			s := output.NewSpinner("Fetching sensor data...")
 			s.Start()
-			resp, err := client.Get(fmt.Sprintf("/baremetal/%d/bmc-sensors", bmID))
+			data, err := client.GraphQL(
+				`query($id: ID!) { baremetal(id: $id) { sensors { ipmiAvailable powerOn lastSeen temperatures { name value unit } fans { name value unit } } } }`,
+				map[string]interface{}{"id": strconv.Itoa(bmID)},
+			)
 			s.Stop()
+			var apiErr *api.APIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized {
+				return fmt.Errorf("%s (BMC sensors are read through the GraphQL API, which does not accept browser logins yet: use an API token, for example CUBE_API_TOKEN=<token> cubecli baremetal sensors %d)", apiErr.Detail, bmID)
+			}
 			if err != nil {
 				return err
 			}
 
+			type reading struct {
+				Name  string  `json:"name"`
+				Value float64 `json:"value"`
+				Unit  string  `json:"unit"`
+			}
+			var result struct {
+				Baremetal *struct {
+					Sensors struct {
+						IPMIAvailable *bool     `json:"ipmiAvailable"`
+						PowerOn       *bool     `json:"powerOn"`
+						LastSeen      *int64    `json:"lastSeen"`
+						Temperatures  []reading `json:"temperatures"`
+						Fans          []reading `json:"fans"`
+					} `json:"sensors"`
+				} `json:"baremetal"`
+			}
+			if err := json.Unmarshal(data, &result); err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
+			}
+			if result.Baremetal == nil {
+				return fmt.Errorf("baremetal server with ID %d not found", bmID)
+			}
+			in := result.Baremetal.Sensors
+
 			if cmdutil.IsJSON(cmd) {
-				return output.PrintJSON(json.RawMessage(resp))
+				return output.PrintJSON(in)
 			}
 
 			var sensors struct {
-				Node          string `json:"node"`
-				IPMIAvailable bool   `json:"ipmi_available"`
-				PowerOn       bool   `json:"power_on"`
+				IPMIAvailable bool
+				PowerOn       bool
 				Sensors       struct {
-					Temperatures []struct {
-						Name  string  `json:"name"`
-						Value float64 `json:"value"`
-					} `json:"temperatures"`
-					Fans []struct {
-						Name  string  `json:"name"`
-						Value float64 `json:"value"`
-					} `json:"fans"`
-				} `json:"sensors"`
+					Temperatures []reading
+					Fans         []reading
+				}
 			}
-			if err := json.Unmarshal(resp, &sensors); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
+			sensors.IPMIAvailable = in.IPMIAvailable != nil && *in.IPMIAvailable
+			sensors.PowerOn = in.PowerOn != nil && *in.PowerOn
+			sensors.Sensors.Temperatures = in.Temperatures
+			sensors.Sensors.Fans = in.Fans
 
 			ipmiStatus := "unavailable"
 			if sensors.IPMIAvailable {
@@ -343,16 +372,21 @@ func NewCmd() *cobra.Command {
 				powerStatus = "on"
 			}
 
+			lastSeen := "never"
+			if in.LastSeen != nil {
+				lastSeen = time.Unix(*in.LastSeen, 0).UTC().Format("2006-01-02 15:04:05 UTC")
+			}
+
 			info := output.NewTable("BMC Status", []string{"Field", "Value"})
-			info.AddRow("Node", sensors.Node)
 			info.AddRow("IPMI", output.FormatStatus(ipmiStatus))
 			info.AddRow("Power", output.FormatStatus(powerStatus))
+			info.AddRow("Last seen", lastSeen)
 			info.Render()
 
 			if len(sensors.Sensors.Temperatures) > 0 {
 				tt := output.NewTable("Temperatures", []string{"Sensor", "Value"})
 				for _, temp := range sensors.Sensors.Temperatures {
-					tt.AddRow(temp.Name, fmt.Sprintf("%.1f", temp.Value))
+					tt.AddRow(temp.Name, fmt.Sprintf("%.1f °C", temp.Value))
 				}
 				tt.Render()
 			}
