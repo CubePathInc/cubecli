@@ -119,12 +119,14 @@ can be the origin of one zone at a time.`,
 				"enabled":              true,
 			}
 			if bucket != "" {
-				// The API sets up the health check of a bucket origin itself.
-				if !cmd.Flags().Changed("health-path") && !cmd.Flags().Changed("no-health-check") {
-					delete(body, "health_check_enabled")
-					delete(body, "health_check_path")
+				// The API fills everything else of a bucket origin (connection, health check,
+				// enabled) and refuses those fields: only name, weight, priority and backup go.
+				if cmd.Flags().Changed("health-path") || cmd.Flags().Changed("no-health-check") {
+					return fmt.Errorf("--health-path and --no-health-check cannot be used with --bucket")
 				}
-				delete(body, "verify_ssl")
+				for _, k := range []string{"health_check_enabled", "health_check_path", "verify_ssl", "enabled"} {
+					delete(body, k)
+				}
 			}
 			if originURL != "" {
 				body["origin_url"] = originURL
