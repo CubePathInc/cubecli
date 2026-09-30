@@ -79,9 +79,23 @@ func TestOriginCreateWithBucketResolvesName(t *testing.T) {
 	if req.Body["object_storage_bucket_uuid"] != bucketUUID {
 		t.Fatalf("body %v", req.Body)
 	}
-	for _, k := range []string{"address", "origin_url", "port", "protocol", "host_header", "verify_ssl", "health_check_path"} {
-		if _, ok := req.Body[k]; ok {
+	// The API refuses anything but these next to object_storage_bucket_uuid.
+	allowed := map[string]bool{"name": true, "weight": true, "priority": true, "is_backup": true, "object_storage_bucket_uuid": true}
+	for k := range req.Body {
+		if !allowed[k] {
 			t.Fatalf("%s sent with --bucket: %v", k, req.Body)
+		}
+	}
+}
+
+func TestOriginCreateBucketRefusesHealthFlags(t *testing.T) {
+	reqs, err := run(t, "cdn", "origin", "create", zoneUUID, "--name", "p", "--bucket", "photos", "--health-path", "/x")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	for _, r := range reqs {
+		if r.Method == http.MethodPost {
+			t.Fatalf("sent %+v", r)
 		}
 	}
 }
