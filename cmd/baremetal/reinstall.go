@@ -69,6 +69,7 @@ func addReinstallCmd(parent *cobra.Command) {
 	reinstallStatusCmd := &cobra.Command{
 		Use:   "status <id>",
 		Short: "Check reinstallation status",
+		Long:  "Show whether an OS reinstallation is running: the server status is deploying while it runs.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
@@ -80,23 +81,40 @@ func addReinstallCmd(parent *cobra.Command) {
 
 			s := output.NewSpinner("Fetching reinstallation status...")
 			s.Start()
-			resp, err := client.Get(fmt.Sprintf("/baremetal/%d/reinstall/status", bmID))
+			resp, err := client.Get("/projects/")
 			s.Stop()
 			if err != nil {
 				return err
 			}
 
-			if cmdutil.IsJSON(cmd) {
-				return output.PrintJSON(json.RawMessage(resp))
+			var projects []struct {
+				Baremetals []struct {
+					ID     int    `json:"id"`
+					Status string `json:"status"`
+				} `json:"baremetals"`
+			}
+			if err := json.Unmarshal(resp, &projects); err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
+			}
+			status, found := "", false
+			for _, p := range projects {
+				for _, bm := range p.Baremetals {
+					if bm.ID == bmID {
+						status, found = bm.Status, true
+					}
+				}
+			}
+			if !found {
+				return fmt.Errorf("baremetal server with ID %d not found", bmID)
 			}
 
-			var result struct {
+			result := struct {
 				IsReinstalling bool   `json:"is_reinstalling"`
 				Status         string `json:"status"`
-				OSName         string `json:"os_name"`
-			}
-			if err := json.Unmarshal(resp, &result); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
+			}{IsReinstalling: status == "deploying", Status: status}
+
+			if cmdutil.IsJSON(cmd) {
+				return output.PrintJSON(result)
 			}
 
 			reinstalling := "no"
@@ -107,9 +125,42 @@ func addReinstallCmd(parent *cobra.Command) {
 			t := output.NewTable("Reinstallation Status", []string{"Field", "Value"})
 			t.AddRow("Reinstalling", reinstalling)
 			t.AddRow("Status", output.FormatStatus(result.Status))
-			t.AddRow("OS", result.OSName)
 			t.Render()
 
+			return nil
+		},
+	}
+
+	reinstallCancelCmd := &cobra.Command{
+		Use:   "cancel <id>",
+		Short: "Cancel a pending or running reinstallation",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := cmdutil.GetClient(cmd)
+
+			bmID, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid baremetal id: %s", args[0])
+			}
+
+			if !cmdutil.CheckForce(cmd, "Cancel the reinstallation of this server?") {
+				output.PrintWarning("Aborted")
+				return nil
+			}
+
+			s := output.NewSpinner("Cancelling reinstallation...")
+			s.Start()
+			resp, err := client.Delete(fmt.Sprintf("/baremetal/%d/reinstall", bmID))
+			s.Stop()
+			if err != nil {
+				return err
+			}
+
+			if cmdutil.IsJSON(cmd) {
+				return output.PrintJSON(json.RawMessage(resp))
+			}
+
+			output.PrintSuccess("Reinstallation cancelled")
 			return nil
 		},
 	}
@@ -124,6 +175,8 @@ func addReinstallCmd(parent *cobra.Command) {
 	reinstallStartCmd.MarkFlagRequired("hostname")
 	reinstallStartCmd.MarkFlagRequired("password")
 
-	reinstallCmd.AddCommand(reinstallStartCmd, reinstallStatusCmd)
+	reinstallCancelCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
+
+	reinstallCmd.AddCommand(reinstallStartCmd, reinstallStatusCmd, reinstallCancelCmd)
 	parent.AddCommand(reinstallCmd)
 }
