@@ -131,7 +131,6 @@ func bucketGetCmd() *cobra.Command {
 				ObjectsCount   int64       `json:"objects_count"`
 				UsageUpdatedAt *string     `json:"usage_updated_at"`
 				MonthlyCharges float64     `json:"monthly_charges"`
-				CreatedAt      string      `json:"created_at"`
 				Connection     struct {
 					Endpoint       string `json:"endpoint"`
 					Region         string `json:"region"`
@@ -185,7 +184,6 @@ func bucketGetCmd() *cobra.Command {
 				info.AddRow("Size measured at", *b.UsageUpdatedAt)
 			}
 			info.AddRow("Charged this month", formatUSD(b.MonthlyCharges))
-			info.AddRow("Created", b.CreatedAt)
 			info.Render()
 
 			if b.Usage != nil {
