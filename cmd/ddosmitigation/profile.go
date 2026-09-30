@@ -83,10 +83,10 @@ func profileCmd() *cobra.Command {
 			}
 			t := output.NewTable("Protection Profile "+fmt.Sprint(p["network"]), []string{"Setting", "Value"})
 			for _, f := range profileFields {
-				t.AddRow(f.Name, fmt.Sprint(p[f.Name]))
+				t.AddRow(f.Name, output.FormatValue(p[f.Name]))
 			}
-			t.AddRow("always_on_mitigation", fmt.Sprint(p["always_on_mitigation"]))
-			t.AddRow("symmetric_routing", fmt.Sprint(p["symmetric_routing"]))
+			t.AddRow("always_on_mitigation", output.FormatValue(p["always_on_mitigation"]))
+			t.AddRow("symmetric_routing", output.FormatValue(p["symmetric_routing"]))
 			t.Render()
 			return nil
 		},

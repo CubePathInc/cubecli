@@ -618,13 +618,13 @@ func configCmd() *cobra.Command {
 				case len(p.Enum) > 0:
 					vals := make([]string, len(p.Enum))
 					for i, v := range p.Enum {
-						vals[i] = fmt.Sprint(v)
+						vals[i] = output.FormatValue(v)
 					}
 					allowed = strings.Join(vals, ", ")
 				case p.Min != nil || p.Max != nil:
 					allowed = fmt.Sprintf("%v - %v", valueOrDash(p.Min), valueOrDash(p.Max))
 				}
-				t.AddRow(n, p.Type, fmt.Sprint(p.Value), allowed, cmdutil.YesNo(p.RequiresRestart), p.Description)
+				t.AddRow(n, p.Type, output.FormatValue(p.Value), allowed, cmdutil.YesNo(p.RequiresRestart), p.Description)
 			}
 			t.Render()
 			if cfg.Note != "" {
@@ -681,7 +681,7 @@ func valueOrDash(v interface{}) string {
 	if v == nil {
 		return "-"
 	}
-	return fmt.Sprint(v)
+	return output.FormatValue(v)
 }
 
 // parseParams turns name=value pairs into typed JSON values.
