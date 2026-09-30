@@ -278,6 +278,12 @@ func usageCmd() *cobra.Command {
 
 // --- resolution helpers ---
 
+// ResolveBucket returns the uuid of a bucket given its uuid or its name. The CDN
+// origin commands use it to add a bucket as an origin.
+func ResolveBucket(client *api.Client, ref string) (string, error) {
+	return resolveBucket(client, ref)
+}
+
 // resolveBucket returns the uuid of a bucket given its uuid or its name.
 func resolveBucket(client *api.Client, ref string) (string, error) {
 	uuids, err := resolveBuckets(client, []string{ref})

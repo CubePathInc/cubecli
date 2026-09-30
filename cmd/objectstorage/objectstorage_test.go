@@ -66,9 +66,6 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/object-storage/buckets":
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"detail":"Bucket is being created","uuid":"` + bucketUUID + `","name":"photos","status":"pending","endpoint":"https://eu.cubestorage.io"}`))
-	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/cdn"):
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"detail":"CDN connection started","zone_uuid":"z","zone_name":"photos","domain":"photos.cubecdn.io","custom_domain":null,"reused_zone":false,"status":"connecting"}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/usage":
 		_, _ = w.Write([]byte(`{"period":"2026-09","metrics_available":false,"total_cost":0.0012,"projected_cost":0.0013,"tiers":[{"tier":{"name":"Infrequent Access"},"storage_gib_month":null,"cost":0.0012,"free_tier":{"storage_gb_month":{"included":5,"used":null}}}],"buckets":[]}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/tiers":
@@ -250,29 +247,6 @@ func TestBucketUpdate(t *testing.T) {
 	}
 	if _, _, err := run(t, "s3", "bucket", "update", bucketUUID); err == nil {
 		t.Fatal("expected an error without fields")
-	}
-}
-
-func TestBucketCDNConnectAndDisconnect(t *testing.T) {
-	_, reqs, err := run(t, "s3", "bucket", "cdn", "connect", "photos", "--zone-name", "photos", "--plan", "starter")
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := last(reqs)
-	if req.Method != http.MethodPost || req.Path != "/object-storage/buckets/"+bucketUUID+"/cdn" ||
-		req.Body["zone_name"] != "photos" || req.Body["plan_name"] != "starter" {
-		t.Fatalf("got %+v", req)
-	}
-	if _, ok := req.Body["custom_domain"]; ok {
-		t.Fatalf("custom_domain sent without the flag: %v", req.Body)
-	}
-
-	_, reqs, err = run(t, "s3", "bucket", "cdn", "disconnect", bucketUUID, "-f")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if req := last(reqs); req.Method != http.MethodDelete || req.Path != "/object-storage/buckets/"+bucketUUID+"/cdn" {
-		t.Fatalf("got %+v", req)
 	}
 }
 
