@@ -61,6 +61,7 @@ Buckets accept their uuid or their name.`,
 		bucketCmd(),
 		keyCmd(),
 		usageCmd(),
+		presignCmd(),
 	)
 
 	return osCmd
