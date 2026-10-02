@@ -23,6 +23,7 @@ func bucketCmd() *cobra.Command {
 		bucketUpdateCmd(),
 		bucketDeleteCmd(),
 		bucketMetricsCmd(),
+		bucketLifecycleCmd(),
 	)
 	return cmd
 }

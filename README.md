@@ -306,6 +306,7 @@ take their uuid or name.
 | `cubecli objectstorage usage [--period YYYY-MM] [--tag k=v]` | Month usage and cost per tier and bucket |
 | `cubecli objectstorage presign <bucket>/<key> [--expires 1h]` | Temporary download link for one object, signed locally with your access key |
 | `cubecli objectstorage bucket metrics <bucket> [--range 24h] [--part storage,traffic,responses]` | Stored size, traffic and responses over 1h to 30d (needs an API token: GraphQL) |
+| `cubecli objectstorage bucket lifecycle get\|set\|delete <bucket>` | Lifecycle rules: `set --file rules.json` (or `-` for stdin) or `set --expire-days 30 --prefix logs/`; `--wait` until applied |
 
 ```bash
 cubecli s3 bucket create photos --tier ia --tag env=prod --tag team=web
@@ -314,6 +315,22 @@ cubecli s3 bucket update photos --tag env=staging    # replaces every tag; --cle
 cubecli s3 key create --name backups --tier ia --output env > .env.cubepath-storage   # new file; or rclone, aws
 aws s3 ls s3://photos --endpoint-url https://eu.cubestorage.io --region eu
 cubecli s3 bucket metrics photos --range 7d --part traffic        # egress, CDN and requests of the week
+```
+
+Lifecycle rules delete objects in the background, permanently. They are set through
+cubecli, the API and the dashboard (the S3 `PutBucketLifecycleConfiguration` call
+answers 403; reading them with S3 works). Setting rules replaces all of them; they are
+applied within seconds (up to 10 minutes after a previous change of the same bucket)
+and objects go within 48 hours of their due date. In a versioned bucket an expiration
+only adds a delete marker: add a `noncurrent_version_expiration` rule to free the space.
+Incomplete multipart uploads are always aborted after 7 days.
+
+```bash
+cubecli s3 bucket lifecycle set logs --expire-days 30 --prefix logs/ --wait
+cubecli s3 bucket lifecycle set photos --file rules.json    # {"rules": [{"id": "old-versions", "enabled": true,
+                                                            #   "noncurrent_version_expiration": {"noncurrent_days": 30}}]}
+cubecli s3 bucket lifecycle get photos
+cubecli s3 bucket lifecycle delete photos
 ```
 
 Buckets are private. To serve one publicly, add it as the origin of a CDN zone:

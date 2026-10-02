@@ -73,6 +73,12 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 			"storage":{"start":1,"end":2,"step":3600,"series":[{"name":"size_bytes","unit":"BYTES","points":[{"ts":1,"value":1024},{"ts":2,"value":2048}]}]},
 			"traffic":{"start":1,"end":2,"step":300,"series":[{"name":"egress_bytes","unit":"BYTES","points":[{"ts":1,"value":1048576},{"ts":2,"value":1048576}]},{"name":"class_b_requests","unit":"COUNT","points":[{"ts":1,"value":1000},{"ts":2,"value":234}]}]},
 			"responses":{"start":1,"end":2,"step":300,"series":[{"name":"responses_4xx","unit":"COUNT","points":[{"ts":1,"value":3}]}]}}}}`))
+	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets/"+bucketUUID+"/lifecycle":
+		_, _ = w.Write([]byte(`{"bucket_uuid":"` + bucketUUID + `","status":"active","generation":3,"applied_generation":3,"error":null,"updated_at":"2026-10-02T10:00:00","notes":["Objects are removed within 48 hours of their due date."],"platform_rules":[],
+			"rules":[{"id":"logs-30d","enabled":true,"filter":{"prefix":"logs/","tags":null,"object_size_greater_than":null,"object_size_less_than":null},"expiration":{"days":30,"date":null,"expired_object_delete_marker":null},"noncurrent_version_expiration":{"noncurrent_days":7,"newer_noncurrent_versions":3},"abort_incomplete_multipart_upload":null}]}`))
+	case (r.Method == http.MethodPut || r.Method == http.MethodDelete) && r.URL.Path == "/object-storage/buckets/"+bucketUUID+"/lifecycle":
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"detail":"Lifecycle rules are being applied","generation":3,"notes":[]}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/tiers":
 		_, _ = w.Write([]byte(`[{"uuid":"t1","slug":"infrequent_access","name":"Infrequent Access","region":"eu","endpoint":"https://eu.cubestorage.io","prices":{"storage_gb_month":0.004},"free_tier":{"requests":20000},"accepting_new":true}]`))
 	default:
