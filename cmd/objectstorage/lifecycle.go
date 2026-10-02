@@ -69,7 +69,7 @@ func bucketLifecycleCmd() *cobra.Command {
 days or on a date, noncurrent versions of a versioned bucket, orphan delete markers and
 incomplete multipart uploads.
 
-Rules are applied asynchronously (usually in seconds, up to 10 minutes after a previous
+Rules are applied asynchronously (usually in seconds, up to about 12 minutes after a previous
 change of the same bucket) and objects are removed within 48 hours of their due date.
 Deletions are permanent. In a versioned bucket an expiration only adds a delete marker:
 add a noncurrent version rule to free the space.`,

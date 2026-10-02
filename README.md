@@ -320,7 +320,7 @@ cubecli s3 bucket metrics photos --range 7d --part traffic        # egress, CDN 
 Lifecycle rules delete objects in the background, permanently. They are set through
 cubecli, the API and the dashboard (the S3 `PutBucketLifecycleConfiguration` call
 answers 403; reading them with S3 works). Setting rules replaces all of them; they are
-applied within seconds (up to 10 minutes after a previous change of the same bucket)
+applied within seconds (up to about 12 minutes after a previous change of the same bucket)
 and objects go within 48 hours of their due date. In a versioned bucket an expiration
 only adds a delete marker: add a `noncurrent_version_expiration` rule to free the space.
 Incomplete multipart uploads are always aborted after 7 days.
