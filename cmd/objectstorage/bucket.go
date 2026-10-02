@@ -25,6 +25,7 @@ func bucketCmd() *cobra.Command {
 		bucketMetricsCmd(),
 		bucketLifecycleCmd(),
 		bucketObjectLockCmd(),
+		bucketEncryptionCmd(),
 	)
 	return cmd
 }
@@ -252,6 +253,10 @@ Tags are labels to organize and filter buckets (at most 50; key up to 128 and
 value up to 256 characters). They are managed with cubecli, the API and the
 dashboard only: S3 bucket tagging calls are not supported.
 
+Encryption at rest (AES-256) is on by default: --no-encryption creates the
+bucket without it. It can be enabled later (bucket encryption enable), never
+turned off.
+
 --object-lock creates the bucket with Object Lock (WORM): object versions cannot
 be deleted or overwritten until their retention date. It can only be turned on
 now, never later, and implies versioning and deletion protection. It needs
@@ -264,6 +269,7 @@ version:
 		Example: `  cubecli objectstorage bucket create photos --tier ia
   cubecli s3 bucket create backups --tier infrequent_access --project 12 --versioning
   cubecli s3 bucket create logs --tier ia --tag env=prod --tag team=data
+  cubecli s3 bucket create scratch --tier ia --no-encryption
   cubecli s3 bucket create veeam --tier ia --object-lock --accept-object-lock-terms
   cubecli s3 bucket create archive --tier ia --object-lock --lock-mode governance --lock-days 30 --accept-object-lock-terms`,
 		Args: cobra.ExactArgs(1),
@@ -312,10 +318,12 @@ version:
 				}
 			}
 
+			noEncryption, _ := cmd.Flags().GetBool("no-encryption")
 			body := map[string]interface{}{
 				"name":       args[0],
 				"tier":       normalizeTier(tier),
 				"versioning": versioning,
+				"encryption": !noEncryption,
 			}
 			if objectLockOn {
 				body["object_lock"] = true
@@ -366,6 +374,7 @@ version:
 	cmd.Flags().IntP("project", "p", 0, "Project ID (default: the organization's first project)")
 	cmd.Flags().Bool("versioning", false, "Enable object versioning")
 	cmd.Flags().StringArray("tag", nil, "Tag as key=value (repeatable)")
+	cmd.Flags().Bool("no-encryption", false, "Create the bucket without encryption at rest (it can be enabled later, never turned off)")
 	cmd.Flags().Bool("object-lock", false, "Create the bucket with Object Lock (only possible now, never later)")
 	cmd.Flags().String("lock-mode", "", "Default retention mode: governance or compliance")
 	cmd.Flags().Int("lock-days", 0, "Default retention in days")
