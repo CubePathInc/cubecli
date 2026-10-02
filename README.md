@@ -304,11 +304,13 @@ take their uuid or name.
 | `cubecli objectstorage bucket list\|get\|create\|update\|delete` | Bucket management (`create <name> --tier ia`, `delete --purge` also deletes the content) |
 | `cubecli objectstorage key list\|create\|delete` | Access keys; the secret is shown once |
 | `cubecli objectstorage usage [--period YYYY-MM]` | Month usage and cost per tier and bucket |
+| `cubecli objectstorage bucket metrics <bucket> [--range 24h] [--part storage,traffic,responses]` | Stored size, traffic and responses over 1h to 30d (needs an API token: GraphQL) |
 
 ```bash
 cubecli s3 bucket create photos --tier ia
 cubecli s3 key create --name backups --tier ia --output env > .env.cubepath-storage   # new file; or rclone, aws
 aws s3 ls s3://photos --endpoint-url https://eu.cubestorage.io --region eu
+cubecli s3 bucket metrics photos --range 7d --part traffic        # egress, CDN and requests of the week
 ```
 
 Buckets are private. To serve one publicly, add it as the origin of a CDN zone:
