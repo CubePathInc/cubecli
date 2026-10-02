@@ -302,7 +302,8 @@ take their uuid or name.
 |---------|-------------|
 | `cubecli objectstorage tiers` | Tiers with endpoint, prices and free tier |
 | `cubecli objectstorage bucket list\|get\|create\|update\|delete` | Bucket management (`create <name> --tier ia`, `delete --purge` also deletes the content) |
-| `cubecli objectstorage key list\|create\|delete` | Access keys; the secret is shown once |
+| `cubecli objectstorage bucket object-lock set <bucket> --mode governance\|compliance --days N\|--years N` | Change the default retention of a bucket with Object Lock (`--remove` drops a governance rule) |
+| `cubecli objectstorage key list\|create\|delete` | Access keys; the secret is shown once (`create --bypass-governance` for keys that may delete governance versions) |
 | `cubecli objectstorage usage [--period YYYY-MM] [--tag k=v]` | Month usage and cost per tier and bucket |
 | `cubecli objectstorage presign <bucket>/<key> [--expires 1h]` | Temporary download link for one object, signed locally with your access key |
 | `cubecli objectstorage bucket metrics <bucket> [--range 24h] [--part storage,traffic,responses]` | Stored size, traffic and responses over 1h to 30d (needs an API token: GraphQL) |
@@ -319,6 +320,22 @@ cubecli s3 bucket metrics photos --range 7d --part traffic        # egress, CDN 
 Buckets are private. To serve one publicly, add it as the origin of a CDN zone:
 `cubecli cdn origin create <zone_uuid> --name photos --bucket photos`. Deleting that
 origin disconnects the bucket.
+
+Object Lock (WORM) is chosen when the bucket is created and can never be added
+later; it keeps versioning enabled and starts the bucket protected. Governance
+retention can be bypassed by keys created with `--bypass-governance`; compliance
+retention cannot be deleted or shortened by anyone before its date (cubecli asks
+for confirmation unless `--yes`). Deleting a bucket keeps the versions still under
+retention or legal hold (`bucket get` shows "Locked content kept") and they keep
+being billed.
+
+```bash
+cubecli s3 bucket create veeam --tier ia --object-lock --accept-object-lock-terms   # Veeam sets retention per object
+cubecli s3 bucket create archive --tier ia --object-lock --lock-mode governance --lock-days 30 --accept-object-lock-terms
+cubecli s3 bucket object-lock set archive --mode governance --days 90 --accept-object-lock-terms
+cubecli s3 key create --name veeam --tier ia --bucket veeam --bypass-governance --output aws
+cubecli s3 bucket delete archive --purge --bypass-governance   # also deletes governance versions
+```
 
 Bucket tags (at most 50 per bucket) are managed with cubecli, the API and the
 dashboard; S3 bucket tagging calls (`GetBucketTagging`, `PutBucketTagging`) answer
