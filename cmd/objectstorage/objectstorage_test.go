@@ -25,6 +25,8 @@ const (
 	// uuidNamed is a valid bucket name that is also uuid-shaped.
 	uuidNamed     = "12345678-1234-1234-1234-123456789012"
 	uuidNamedUUID = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+	destUUID      = "dddddddd-1111-4222-8333-444444444444"
+	ruleUUID      = "eeeeeeee-5555-4666-8777-888888888888"
 )
 
 type recorded struct {
@@ -83,6 +85,17 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"slug":"infrequent_access","name":"Infrequent Access"},"versioning":"off","object_lock":{"enabled":false,"default_retention":null},"encryption":{"algorithm":"AES256","scope":"new_objects"},"connection":{"endpoint":"https://eu.cubestorage.io","region":"eu"}}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/tiers":
 		_, _ = w.Write([]byte(`[{"uuid":"t1","slug":"infrequent_access","name":"Infrequent Access","region":"eu","endpoint":"https://eu.cubestorage.io","prices":{"storage_gb_month":0.004},"free_tier":{"requests":20000},"accepting_new":true}]`))
+	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/event-destinations":
+		_, _ = w.Write([]byte(`[{"uuid":"` + destUUID + `","name":"uploads-hook","type":"webhook","url_masked":"https://example.com/***","notificator":null,"payload_format":"cubepath","status":"active","rules_count":1}]`))
+	case (r.Method == http.MethodPost && (r.URL.Path == "/object-storage/event-destinations" || r.URL.Path == "/object-storage/event-destinations/"+destUUID+"/rotate-secret")):
+		_, _ = w.Write([]byte(`{"destination":{"uuid":"` + destUUID + `","name":"uploads-hook","type":"webhook","url_masked":"https://example.com/***","payload_format":"cubepath","status":"active","rules_count":0},"signing_secret":"whsec_S3cretS3cretS3cretS3cretS3cr"}`))
+	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/event-destinations/"+destUUID+"/deliveries":
+		_, _ = w.Write([]byte(`[{"ts":"2026-10-02T10:00:00","event_type":"object.created","object_key":"incoming/a.jpg","attempt":2,"status":"failed","http_status":500,"latency_ms":120,"error":"HTTP 500"}]`))
+	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets/"+bucketUUID+"/event-rules":
+		_, _ = w.Write([]byte(`[{"uuid":"` + ruleUUID + `","name":"on-created","bucket_uuid":"` + bucketUUID + `","destination":{"uuid":"` + destUUID + `","name":"uploads-hook","type":"webhook"},"events":["object.created"],"prefix":"incoming/","suffix":"","enabled":true,"status":"active","error_message":null}]`))
+	case r.Method == http.MethodPost && r.URL.Path == "/object-storage/buckets/"+bucketUUID+"/event-rules":
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"uuid":"` + ruleUUID + `","name":"on-created","bucket_uuid":"` + bucketUUID + `","destination":{"uuid":"` + destUUID + `","name":"uploads-hook","type":"webhook"},"events":["object.created"],"prefix":"incoming/","suffix":".jpg","enabled":true,"status":"pending","error_message":null}`))
 	default:
 		_, _ = w.Write([]byte(`{"detail":"ok"}`))
 	}
