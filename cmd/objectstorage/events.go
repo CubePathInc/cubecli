@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/CubePathInc/cubecli/internal/api"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
@@ -33,13 +34,15 @@ type eventDestination struct {
 		Name string `json:"name"`
 		Type string `json:"type"`
 	} `json:"notificator"`
-	PayloadFormat  string  `json:"payload_format"`
-	Status         string  `json:"status"`
-	DisabledReason *string `json:"disabled_reason"`
-	LastSuccessAt  *string `json:"last_success_at"`
-	LastFailureAt  *string `json:"last_failure_at"`
-	LastError      *string `json:"last_error"`
-	RulesCount     int     `json:"rules_count"`
+	PayloadFormat           string  `json:"payload_format"`
+	Status                  string  `json:"status"`
+	DisabledReason          *string `json:"disabled_reason"`
+	PreviousSecretExpiresAt *string `json:"previous_secret_expires_at"`
+	LastSuccessAt           *string `json:"last_success_at"`
+	LastFailureAt           *string `json:"last_failure_at"`
+	LastError               *string `json:"last_error"`
+	RulesCount              int     `json:"rules_count"`
+	CreatedAt               *string `json:"created_at"`
 }
 
 // target is the masked URL of a webhook or the channel of a notificator destination.
@@ -54,7 +57,7 @@ type eventRule struct {
 	UUID        string `json:"uuid"`
 	Name        string `json:"name"`
 	BucketUUID  string `json:"bucket_uuid"`
-	Destination struct {
+	Destination *struct {
 		UUID string `json:"uuid"`
 		Name string `json:"name"`
 		Type string `json:"type"`
@@ -114,7 +117,7 @@ optional key prefix and suffix, and the destination.
 
 Webhook deliveries carry CubePath-Timestamp and CubePath-Signature headers. The
 signature is v1=<hex HMAC-SHA256 of timestamp + "." + raw body> with the signing
-secret; during a secret rotation several v1= values are sent. Reject deliveries
+secret; for 24 hours after a rotation it is "v1=<new>, v1=<previous>". Reject deliveries
 whose timestamp is more than 5 minutes old.`,
 	}
 	cmd.AddCommand(destinationCmd(), ruleCmd())
@@ -181,6 +184,10 @@ func renderDestination(d eventDestination) {
 	if d.LastError != nil && *d.LastError != "" {
 		t.AddRow("Last error", *d.LastError)
 	}
+	if d.PreviousSecretExpiresAt != nil && *d.PreviousSecretExpiresAt != "" {
+		t.AddRow("Previous secret signs until", *d.PreviousSecretExpiresAt)
+	}
+	t.AddRow("Created", strOr(d.CreatedAt, "-"))
 	t.Render()
 }
 
@@ -190,8 +197,9 @@ func printSecretResponse(cmd *cobra.Command, resp json.RawMessage) error {
 		return output.PrintJSON(resp)
 	}
 	var out struct {
-		Destination   eventDestination `json:"destination"`
-		SigningSecret *string          `json:"signing_secret"`
+		Destination             eventDestination `json:"destination"`
+		SigningSecret           *string          `json:"signing_secret"`
+		PreviousSecretExpiresAt *string          `json:"previous_secret_expires_at"`
 	}
 	if err := json.Unmarshal(resp, &out); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
@@ -200,6 +208,9 @@ func printSecretResponse(cmd *cobra.Command, resp json.RawMessage) error {
 	if out.SigningSecret != nil && *out.SigningSecret != "" {
 		fmt.Printf("\nSigning secret: %s\n", *out.SigningSecret)
 		output.PrintWarning("Copy the signing secret now: it will not be shown again.")
+	}
+	if out.PreviousSecretExpiresAt != nil && *out.PreviousSecretExpiresAt != "" {
+		output.PrintInfo("The previous secret keeps signing until " + *out.PreviousSecretExpiresAt + " (UTC).")
 	}
 	return nil
 }
@@ -483,58 +494,71 @@ func destTestCmd() *cobra.Command {
 			if cmdutil.IsJSON(cmd) {
 				return output.PrintJSON(resp)
 			}
-			output.PrintSuccess("Test event queued; check it with 'cubecli s3 events destination deliveries " + args[0] + "'")
+			output.PrintSuccess("Test event sent; check the result with 'cubecli s3 events destination deliveries " + args[0] + "'")
 			return nil
 		},
 	}
 }
 
-// delivery is one row of the delivery history; fields the API may leave out are pointers.
+// delivery is one row of the delivery history.
 type delivery struct {
 	TS         string  `json:"ts"`
+	TSMs       int64   `json:"ts_ms"`
 	EventID    string  `json:"event_id"`
 	DeliveryID string  `json:"delivery_id"`
 	EventType  string  `json:"event_type"`
+	BucketUUID string  `json:"bucket_uuid"`
+	BucketName *string `json:"bucket_name"`
+	RuleUUID   string  `json:"rule_uuid"`
 	ObjectKey  string  `json:"object_key"`
 	Attempt    int     `json:"attempt"`
 	Status     string  `json:"status"`
-	HTTPStatus *int    `json:"http_status"`
-	LatencyMS  *int64  `json:"latency_ms"`
-	Error      *string `json:"error"`
+	HTTPStatus int     `json:"http_status"`
+	LatencyMS  int64   `json:"latency_ms"`
+	Error      string  `json:"error"`
 }
 
-// parseDeliveries accepts a bare list or an object holding it under "deliveries" or "items".
-func parseDeliveries(resp json.RawMessage) ([]delivery, error) {
-	var list []delivery
-	if err := json.Unmarshal(resp, &list); err == nil {
-		return list, nil
+// deliveriesPage is the GET .../deliveries answer: newest first, next_before pages back.
+type deliveriesPage struct {
+	Deliveries []delivery `json:"deliveries"`
+	NextBefore *int64     `json:"next_before"`
+}
+
+// parseBefore takes unix milliseconds (what next_before gives) or a UTC time and returns
+// unix milliseconds.
+func parseBefore(v string) (string, error) {
+	if _, err := strconv.ParseInt(v, 10, 64); err == nil {
+		return v, nil
 	}
-	var wrapped struct {
-		Deliveries []delivery `json:"deliveries"`
-		Items      []delivery `json:"items"`
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05", "2006-01-02"} {
+		if t, err := time.Parse(layout, v); err == nil {
+			return strconv.FormatInt(t.UnixMilli(), 10), nil
+		}
 	}
-	if err := json.Unmarshal(resp, &wrapped); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-	if wrapped.Deliveries != nil {
-		return wrapped.Deliveries, nil
-	}
-	return wrapped.Items, nil
+	return "", fmt.Errorf("invalid --before %q: use unix milliseconds (next_before) or a UTC time such as 2026-10-01T00:00:00", v)
 }
 
 func destDeliveriesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deliveries <destination>",
-		Short: "Show the latest deliveries of a destination (last 30 days)",
-		Args:  cobra.ExactArgs(1),
+		Short: "Show the latest deliveries of a destination, newest first",
+		Long: `Show the delivery history of a destination (90 days), newest first.
+
+failed is an attempt that is retried later; dead is an event given up after
+the last retry. When the page is full the next (older) page is printed as a
+--before value.`,
+		Args: cobra.ExactArgs(1),
 		Example: `  cubecli s3 events destination deliveries uploads-hook --status failed
-  cubecli s3 events destination deliveries uploads-hook --limit 100 --before 2026-10-01T00:00:00`,
+  cubecli s3 events destination deliveries uploads-hook --limit 200 --before 1790964001250`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			status, _ := cmd.Flags().GetString("status")
 			limit, _ := cmd.Flags().GetInt("limit")
 			before, _ := cmd.Flags().GetString("before")
 			if status != "" && status != "success" && status != "failed" && status != "dead" {
 				return fmt.Errorf("--status must be success, failed or dead")
+			}
+			if limit < 0 || limit > 200 {
+				return fmt.Errorf("--limit must be between 1 and 200")
 			}
 			q := url.Values{}
 			if status != "" {
@@ -544,7 +568,11 @@ func destDeliveriesCmd() *cobra.Command {
 				q.Set("limit", strconv.Itoa(limit))
 			}
 			if before != "" {
-				q.Set("before", before)
+				ms, err := parseBefore(before)
+				if err != nil {
+					return err
+				}
+				q.Set("before", ms)
 			}
 
 			client := cmdutil.GetClient(cmd)
@@ -566,28 +594,32 @@ func destDeliveriesCmd() *cobra.Command {
 			if cmdutil.IsJSON(cmd) {
 				return output.PrintJSON(resp)
 			}
-			rows, err := parseDeliveries(resp)
-			if err != nil {
-				return err
+			var page deliveriesPage
+			if err := json.Unmarshal(resp, &page); err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
 			}
-			t := output.NewTable("Deliveries", []string{"Time", "Event", "Object", "Attempt", "Status", "HTTP", "Latency", "Error"})
-			for _, d := range rows {
-				httpStatus, latency := "-", "-"
-				if d.HTTPStatus != nil {
-					httpStatus = strconv.Itoa(*d.HTTPStatus)
+			t := output.NewTable("Deliveries", []string{"Time", "Event", "Bucket", "Object", "Attempt", "Status", "HTTP", "Latency", "Error"})
+			for _, d := range page.Deliveries {
+				httpStatus, errMsg := "-", "-"
+				if d.HTTPStatus > 0 {
+					httpStatus = strconv.Itoa(d.HTTPStatus)
 				}
-				if d.LatencyMS != nil {
-					latency = strconv.FormatInt(*d.LatencyMS, 10) + " ms"
+				if d.Error != "" {
+					errMsg = d.Error
 				}
-				t.AddRow(d.TS, d.EventType, d.ObjectKey, strconv.Itoa(d.Attempt), output.FormatStatus(d.Status), httpStatus, latency, strOr(d.Error, "-"))
+				t.AddRow(d.TS, d.EventType, strOr(d.BucketName, "-"), d.ObjectKey, strconv.Itoa(d.Attempt),
+					output.FormatStatus(d.Status), httpStatus, strconv.FormatInt(d.LatencyMS, 10)+" ms", errMsg)
 			}
 			t.Render()
+			if page.NextBefore != nil {
+				fmt.Printf("\nOlder deliveries: --before %d\n", *page.NextBefore)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().String("status", "", "Only success, failed or dead deliveries")
-	cmd.Flags().Int("limit", 0, "Number of deliveries (default 50)")
-	cmd.Flags().String("before", "", "Only deliveries before this time, to page back")
+	cmd.Flags().Int("limit", 0, "Number of deliveries, 1 to 200 (default 50)")
+	cmd.Flags().String("before", "", "Only deliveries before this point: unix milliseconds (as printed) or a UTC time")
 	return cmd
 }
 
@@ -663,7 +695,11 @@ func renderRules(title string, rules []eventRule) {
 		if suffix == "" {
 			suffix = "-"
 		}
-		t.AddRow(r.UUID, r.Name, r.Destination.Name, shortEvents(r.Events), prefix, suffix, yesNo(r.Enabled), status)
+		dest := "-"
+		if r.Destination != nil {
+			dest = r.Destination.Name
+		}
+		t.AddRow(r.UUID, r.Name, dest, shortEvents(r.Events), prefix, suffix, yesNo(r.Enabled), status)
 	}
 	t.Render()
 }

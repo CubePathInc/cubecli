@@ -67,7 +67,7 @@ func TestEventsDestinationRoutesByName(t *testing.T) {
 		{[]string{"delete", "uploads-hook", "--force"}, http.MethodDelete, base},
 		{[]string{"rotate-secret", destUUID, "--force"}, http.MethodPost, base + "/rotate-secret"},
 		{[]string{"test", "uploads-hook"}, http.MethodPost, base + "/test"},
-		{[]string{"deliveries", "uploads-hook", "--status", "failed", "--limit", "10"}, http.MethodGet, base + "/deliveries?limit=10&status=failed"},
+		{[]string{"deliveries", "uploads-hook", "--status", "failed", "--limit", "10", "--before", "2026-10-01T00:00:00"}, http.MethodGet, base + "/deliveries?before=1790812800000&limit=10&status=failed"},
 	}
 	for _, c := range cases {
 		out, reqs, err := run(t, append([]string{"s3", "events", "destination"}, c.args...)...)
@@ -83,7 +83,7 @@ func TestEventsDestinationRoutesByName(t *testing.T) {
 		if c.args[0] == "rotate-secret" && !strings.Contains(out, "whsec_S3cretS3cretS3cretS3cretS3cr") {
 			t.Fatalf("rotate stdout:\n%s", out)
 		}
-		if c.args[0] == "deliveries" && (!strings.Contains(out, "incoming/a.jpg") || !strings.Contains(out, "500")) {
+		if c.args[0] == "deliveries" && (!strings.Contains(out, "incoming/a.jpg") || !strings.Contains(out, "photos") || !strings.Contains(out, "--before 1790964001250")) {
 			t.Fatalf("deliveries stdout:\n%s", out)
 		}
 	}
@@ -150,9 +150,13 @@ func TestEventsRuleListUpdateDelete(t *testing.T) {
 	}
 }
 
-func TestParseDeliveriesAcceptsWrappedList(t *testing.T) {
-	rows, err := parseDeliveries([]byte(`{"deliveries":[{"status":"success","attempt":1}]}`))
-	if err != nil || len(rows) != 1 || rows[0].Status != "success" {
-		t.Fatalf("%v %+v", err, rows)
+func TestParseBefore(t *testing.T) {
+	for in, want := range map[string]string{"1790964001250": "1790964001250", "2026-10-01": "1790812800000", "2026-10-01T00:00:00Z": "1790812800000"} {
+		if got, err := parseBefore(in); err != nil || got != want {
+			t.Fatalf("%s: got %s, %v", in, got, err)
+		}
+	}
+	if _, err := parseBefore("yesterday"); err == nil {
+		t.Fatal("expected an error")
 	}
 }

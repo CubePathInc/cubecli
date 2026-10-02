@@ -88,9 +88,9 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/event-destinations":
 		_, _ = w.Write([]byte(`[{"uuid":"` + destUUID + `","name":"uploads-hook","type":"webhook","url_masked":"https://example.com/***","notificator":null,"payload_format":"cubepath","status":"active","rules_count":1}]`))
 	case (r.Method == http.MethodPost && (r.URL.Path == "/object-storage/event-destinations" || r.URL.Path == "/object-storage/event-destinations/"+destUUID+"/rotate-secret")):
-		_, _ = w.Write([]byte(`{"destination":{"uuid":"` + destUUID + `","name":"uploads-hook","type":"webhook","url_masked":"https://example.com/***","payload_format":"cubepath","status":"active","rules_count":0},"signing_secret":"whsec_S3cretS3cretS3cretS3cretS3cr"}`))
+		_, _ = w.Write([]byte(`{"destination":{"uuid":"` + destUUID + `","name":"uploads-hook","type":"webhook","url_masked":"https://example.com/***","payload_format":"cubepath","status":"active","rules_count":0},"signing_secret":"whsec_S3cretS3cretS3cretS3cretS3cr","previous_secret_expires_at":"2026-10-03T10:00:00"}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/event-destinations/"+destUUID+"/deliveries":
-		_, _ = w.Write([]byte(`[{"ts":"2026-10-02T10:00:00","event_type":"object.created","object_key":"incoming/a.jpg","attempt":2,"status":"failed","http_status":500,"latency_ms":120,"error":"HTTP 500"}]`))
+		_, _ = w.Write([]byte(`{"deliveries":[{"ts":"2026-10-02T10:00:00.250","ts_ms":1790964001250,"event_id":"evt_1","delivery_id":"dlv_1","event_type":"object.created","bucket_uuid":"` + bucketUUID + `","bucket_name":"photos","rule_uuid":"` + ruleUUID + `","object_key":"incoming/a.jpg","attempt":2,"status":"failed","http_status":500,"latency_ms":120,"error":"HTTP 500"}],"next_before":1790964001250}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets/"+bucketUUID+"/event-rules":
 		_, _ = w.Write([]byte(`[{"uuid":"` + ruleUUID + `","name":"on-created","bucket_uuid":"` + bucketUUID + `","destination":{"uuid":"` + destUUID + `","name":"uploads-hook","type":"webhook"},"events":["object.created"],"prefix":"incoming/","suffix":"","enabled":true,"status":"active","error_message":null}]`))
 	case r.Method == http.MethodPost && r.URL.Path == "/object-storage/buckets/"+bucketUUID+"/event-rules":
