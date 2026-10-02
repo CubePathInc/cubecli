@@ -48,7 +48,7 @@ func NewCmd() *cobra.Command {
 	osCmd := &cobra.Command{
 		Use:     "objectstorage",
 		Aliases: []string{"s3", "object-storage"},
-		Short:   "Manage Object Storage buckets and access keys (S3 compatible)",
+		Short:   "Manage Object Storage buckets, access keys and replication (S3 compatible)",
 		Long: `Manage CubePath Object Storage: S3-compatible buckets and the access keys
 that S3 clients (AWS CLI, rclone, boto3, SDKs) use to reach them.
 
@@ -62,6 +62,7 @@ Buckets accept their uuid or their name.`,
 		keyCmd(),
 		usageCmd(),
 		presignCmd(),
+		replicationCmd(),
 	)
 
 	return osCmd

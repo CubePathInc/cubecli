@@ -25,6 +25,7 @@ const (
 	// uuidNamed is a valid bucket name that is also uuid-shaped.
 	uuidNamed     = "12345678-1234-1234-1234-123456789012"
 	uuidNamedUUID = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+	replUUID      = "cccccccc-dddd-4eee-8fff-000000000001"
 )
 
 type recorded struct {
@@ -81,6 +82,18 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"detail":"Lifecycle rules are being applied","generation":3,"notes":[]}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets/"+bucketUUID:
 		_, _ = w.Write([]byte(`{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"slug":"infrequent_access","name":"Infrequent Access"},"versioning":"off","object_lock":{"enabled":false,"default_retention":null},"encryption":{"algorithm":"AES256","scope":"new_objects"},"connection":{"endpoint":"https://eu.cubestorage.io","region":"eu"}}`))
+	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/replications":
+		_, _ = w.Write([]byte(`[` + replicationJSON + `]`))
+	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/replications/"+replUUID:
+		_, _ = w.Write([]byte(replicationJSON[:len(replicationJSON)-1] + `,"metrics":{"replicated_bytes_24h":1048576,"replicated_objects_24h":12,"failed_objects_1h":0,"queued_objects":3,"queued_bytes":2048,"last_sample_at":"2026-10-02T10:00:00","egress_bytes_month":5242880}}`))
+	case r.Method == http.MethodPost && r.URL.Path == "/object-storage/replications":
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"detail":"Replication is being configured","uuid":"` + replUUID + `","status":"pending"}`))
+	case r.Method == http.MethodPost && r.URL.Path == "/object-storage/buckets/"+otherUUID+"/replication-grants":
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"detail":"Replication grant created. Share the token now: it will not be shown again.","uuid":"` + keyUUID + `","token":"cprg_AbCdEfGhIjKlMnOpQrStUvWxYz012345","token_prefix":"cprg_AbCd","bucket_uuid":"` + otherUUID + `","note":"for Acme","expires_at":"2026-10-09T10:00:00"}`))
+	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets/"+otherUUID+"/replication-grants":
+		_, _ = w.Write([]byte(`[{"uuid":"` + keyUUID + `","token_prefix":"cprg_AbCd","note":"for Acme","status":"open","expires_at":"2026-10-09T10:00:00","used_at":null,"revoked_at":null,"created_at":"2026-10-02T10:00:00"}]`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/tiers":
 		_, _ = w.Write([]byte(`[{"uuid":"t1","slug":"infrequent_access","name":"Infrequent Access","region":"eu","endpoint":"https://eu.cubestorage.io","prices":{"storage_gb_month":0.004},"free_tier":{"requests":20000},"accepting_new":true}]`))
 	default:
@@ -92,6 +105,12 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 // printed to stdout and the requests it sent.
 func run(t *testing.T, args ...string) (string, []recorded, error) {
 	t.Helper()
+	return runWithStdin(t, "", args...)
+}
+
+// runWithStdin is run with stdin set to the given text.
+func runWithStdin(t *testing.T, stdin string, args ...string) (string, []recorded, error) {
+	t.Helper()
 	f := &fakeAPI{}
 	srv := httptest.NewServer(http.HandlerFunc(f.handler))
 	defer srv.Close()
@@ -100,6 +119,7 @@ func run(t *testing.T, args ...string) (string, []recorded, error) {
 	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(NewCmd())
 	root.SetArgs(args)
+	root.SetIn(strings.NewReader(stdin))
 	ctx := context.WithValue(context.Background(), cmdutil.ClientKey, api.NewClient(srv.URL, "tok"))
 
 	oldStdout, oldStderr := os.Stdout, os.Stderr

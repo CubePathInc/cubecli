@@ -308,6 +308,9 @@ take their uuid or name.
 | `cubecli objectstorage presign <bucket>/<key> [--expires 1h]` | Temporary download link for one object, signed locally with your access key |
 | `cubecli objectstorage bucket metrics <bucket> [--range 24h] [--part storage,traffic,responses]` | Stored size, traffic and responses over 1h to 30d (needs an API token: GraphQL) |
 | `cubecli objectstorage bucket lifecycle get\|set\|delete <bucket>` | Lifecycle rules: `set --file rules.json` (or `-` for stdin) or `set --expire-days 30 --prefix logs/`; `--wait` until applied |
+| `cubecli objectstorage replication list\|get\|create\|update\|delete\|resync <replication>` | Replicate a bucket to another CubePath bucket or to an external S3 bucket (takes the replication uuid or the source bucket name) |
+| `cubecli objectstorage replication revoke <uuid>` | Stop a replication from another organization into one of your buckets |
+| `cubecli objectstorage replication grant create\|list\|delete` | One use tokens that let another organization replicate into a bucket; the token is shown once |
 
 ```bash
 cubecli s3 bucket create photos --tier ia --tag env=prod --tag team=web
@@ -332,6 +335,27 @@ cubecli s3 bucket lifecycle set photos --file rules.json    # {"rules": [{"id": 
                                                             #   "noncurrent_version_expiration": {"noncurrent_days": 30}}]}
 cubecli s3 bucket lifecycle get photos
 cubecli s3 bucket lifecycle delete photos
+```
+
+Replication copies every new object version of a bucket, asynchronously, to one
+destination: another CubePath bucket of the same tier, or a bucket of an external S3
+compatible provider over HTTPS (port 443 only). Versioning must be enabled on both
+sides, and buckets with Object Lock cannot be sources. A CubePath destination lives in
+the same location as the source, so it is not a disaster recovery copy: use an external
+destination for an off site copy. Data sent to an external destination is billed as
+egress of the source bucket. The secret of an external destination is never taken from
+the command line: pipe it with `--secret-key-stdin` or set `CUBEPATH_REPL_SECRET`.
+
+```bash
+cubecli s3 replication create photos --dest-bucket photos-copy          # same organization
+printf '%s' "$AWS_SECRET" | cubecli s3 replication create photos --external --provider aws \
+  --endpoint s3.eu-west-1.amazonaws.com --region eu-west-1 --bucket acme-photos-backup \
+  --access-key AKIA... --secret-key-stdin
+cubecli s3 replication get photos                                       # health, initial copy, metrics
+cubecli s3 replication update photos --enabled=false                    # pause; --enabled resumes
+cubecli s3 replication resync photos --older-than-days 3
+cubecli s3 replication grant create photos-backup --note "for Acme"     # another organization: give it the
+cubecli s3 replication create photos --dest-bucket <uuid> --grant-token cprg_...   # token and the bucket uuid
 ```
 
 Buckets are private. To serve one publicly, add it as the origin of a CDN zone:
