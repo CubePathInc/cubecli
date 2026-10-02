@@ -48,23 +48,24 @@ func bucketListCmd() *cobra.Command {
 			}
 
 			var buckets []struct {
-				UUID           string      `json:"uuid"`
-				Name           string      `json:"name"`
-				Status         string      `json:"status"`
-				ProjectID      *int        `json:"project_id"`
-				Tier           tierSummary `json:"tier"`
-				Versioning     string      `json:"versioning"`
-				Protected      bool        `json:"protected"`
-				SizeBytes      int64       `json:"size_bytes"`
-				ObjectsCount   int64       `json:"objects_count"`
-				MonthlyCharges float64     `json:"monthly_charges"`
-				CDNConnected   bool        `json:"cdn_connected"`
+				UUID           string            `json:"uuid"`
+				Name           string            `json:"name"`
+				Status         string            `json:"status"`
+				ProjectID      *int              `json:"project_id"`
+				Tier           tierSummary       `json:"tier"`
+				Versioning     string            `json:"versioning"`
+				Protected      bool              `json:"protected"`
+				SizeBytes      int64             `json:"size_bytes"`
+				ObjectsCount   int64             `json:"objects_count"`
+				MonthlyCharges float64           `json:"monthly_charges"`
+				CDNConnected   bool              `json:"cdn_connected"`
+				Tags           map[string]string `json:"tags"`
 			}
 			if err := json.Unmarshal(resp, &buckets); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("Buckets", []string{"UUID", "Name", "Status", "Tier", "Project", "Size", "Objects", "Versioning", "CDN", "Protected", "This month"})
+			t := output.NewTable("Buckets", []string{"UUID", "Name", "Status", "Tier", "Project", "Size", "Objects", "Versioning", "CDN", "Protected", "This month", "Tags"})
 			for _, b := range buckets {
 				t.AddRow(
 					b.UUID,
@@ -78,14 +79,17 @@ func bucketListCmd() *cobra.Command {
 					yesNo(b.CDNConnected),
 					yesNo(b.Protected),
 					formatUSD(b.MonthlyCharges),
+					formatTags(b.Tags, maxTagsColumn),
 				)
 			}
 			t.Render()
 			return nil
 		},
 	}
+	cmd.Example = `  cubecli s3 bucket list --tag env=prod --tag team`
 	cmd.Flags().IntP("project", "p", 0, "Only buckets of this project ID")
 	cmd.Flags().String("tier", "", "Only buckets of this tier (slug, uuid or ia)")
+	addTagFilterFlag(cmd)
 	return cmd
 }
 
@@ -117,20 +121,21 @@ func bucketGetCmd() *cobra.Command {
 			}
 
 			var b struct {
-				UUID           string      `json:"uuid"`
-				Name           string      `json:"name"`
-				Status         string      `json:"status"`
-				SuspendReason  *string     `json:"suspend_reason"`
-				ErrorMessage   *string     `json:"error_message"`
-				ProjectID      *int        `json:"project_id"`
-				Tier           tierSummary `json:"tier"`
-				LocationName   string      `json:"location_name"`
-				Versioning     string      `json:"versioning"`
-				Protected      bool        `json:"protected"`
-				SizeBytes      int64       `json:"size_bytes"`
-				ObjectsCount   int64       `json:"objects_count"`
-				UsageUpdatedAt *string     `json:"usage_updated_at"`
-				MonthlyCharges float64     `json:"monthly_charges"`
+				UUID           string            `json:"uuid"`
+				Name           string            `json:"name"`
+				Status         string            `json:"status"`
+				SuspendReason  *string           `json:"suspend_reason"`
+				ErrorMessage   *string           `json:"error_message"`
+				ProjectID      *int              `json:"project_id"`
+				Tier           tierSummary       `json:"tier"`
+				LocationName   string            `json:"location_name"`
+				Versioning     string            `json:"versioning"`
+				Protected      bool              `json:"protected"`
+				SizeBytes      int64             `json:"size_bytes"`
+				ObjectsCount   int64             `json:"objects_count"`
+				UsageUpdatedAt *string           `json:"usage_updated_at"`
+				MonthlyCharges float64           `json:"monthly_charges"`
+				Tags           map[string]string `json:"tags"`
 				Connection     struct {
 					Endpoint       string `json:"endpoint"`
 					Region         string `json:"region"`
@@ -178,6 +183,7 @@ func bucketGetCmd() *cobra.Command {
 			info.AddRow("Virtual host URL", b.Connection.VirtualHostURL)
 			info.AddRow("Versioning", b.Versioning)
 			info.AddRow("Protected", yesNo(b.Protected))
+			info.AddRow("Tags", formatTags(b.Tags, 0))
 			info.AddRow("Size", formatBytes(b.SizeBytes))
 			info.AddRow("Objects", formatCount(b.ObjectsCount))
 			if b.UsageUpdatedAt != nil {
@@ -227,9 +233,14 @@ func bucketCreateCmd() *cobra.Command {
 and hyphens, and are unique across all CubePath customers.
 
 The bucket is created asynchronously: it is usable once its status is active
-(usually 10 to 20 seconds). Uploads may answer 503 for the first minutes.`,
+(usually 10 to 20 seconds). Uploads may answer 503 for the first minutes.
+
+Tags are labels to organize and filter buckets (at most 50; key up to 128 and
+value up to 256 characters). They are managed with cubecli, the API and the
+dashboard only: S3 bucket tagging calls are not supported.`,
 		Example: `  cubecli objectstorage bucket create photos --tier ia
-  cubecli s3 bucket create backups --tier infrequent_access --project 12 --versioning`,
+  cubecli s3 bucket create backups --tier infrequent_access --project 12 --versioning
+  cubecli s3 bucket create logs --tier ia --tag env=prod --tag team=data`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
@@ -237,6 +248,11 @@ The bucket is created asynchronously: it is usable once its status is active
 			tier, _ := cmd.Flags().GetString("tier")
 			projectID, _ := cmd.Flags().GetInt("project")
 			versioning, _ := cmd.Flags().GetBool("versioning")
+			tagFlags, _ := cmd.Flags().GetStringArray("tag")
+			tags, err := parseTags(tagFlags)
+			if err != nil {
+				return err
+			}
 
 			body := map[string]interface{}{
 				"name":       args[0],
@@ -245,6 +261,9 @@ The bucket is created asynchronously: it is usable once its status is active
 			}
 			if projectID > 0 {
 				body["project_id"] = projectID
+			}
+			if len(tags) > 0 {
+				body["tags"] = tags
 			}
 
 			s := output.NewSpinner("Creating bucket...")
@@ -278,6 +297,7 @@ The bucket is created asynchronously: it is usable once its status is active
 	cmd.Flags().String("tier", "", "Storage tier: slug, uuid or ia (see 'objectstorage tiers')")
 	cmd.Flags().IntP("project", "p", 0, "Project ID (default: the organization's first project)")
 	cmd.Flags().Bool("versioning", false, "Enable object versioning")
+	cmd.Flags().StringArray("tag", nil, "Tag as key=value (repeatable)")
 	_ = cmd.MarkFlagRequired("tier")
 	return cmd
 }
@@ -287,9 +307,15 @@ The bucket is created asynchronously: it is usable once its status is active
 func bucketUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <bucket>",
-		Short: "Change a bucket's versioning or deletion protection",
+		Short: "Change a bucket's versioning, deletion protection or tags",
+		Long: `Change a bucket's versioning, deletion protection or tags.
+
+--tag replaces every tag of the bucket with the ones given; --clear-tags
+removes them all. Tags not given are not kept.`,
 		Example: `  cubecli s3 bucket update photos --versioning enabled
-  cubecli s3 bucket update photos --protected=false`,
+  cubecli s3 bucket update photos --protected=false
+  cubecli s3 bucket update photos --tag env=prod --tag team=web
+  cubecli s3 bucket update photos --clear-tags`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
@@ -303,8 +329,22 @@ func bucketUpdateCmd() *cobra.Command {
 				p, _ := cmd.Flags().GetBool("protected")
 				body["protected"] = p
 			}
+			clearTags, _ := cmd.Flags().GetBool("clear-tags")
+			if cmd.Flags().Changed("tag") {
+				if clearTags {
+					return fmt.Errorf("--tag and --clear-tags cannot be used together")
+				}
+				tagFlags, _ := cmd.Flags().GetStringArray("tag")
+				tags, err := parseTags(tagFlags)
+				if err != nil {
+					return err
+				}
+				body["tags"] = tags
+			} else if clearTags {
+				body["tags"] = map[string]string{}
+			}
 			if len(body) == 0 {
-				return fmt.Errorf("at least one of --versioning or --protected must be specified")
+				return fmt.Errorf("at least one of --versioning, --protected, --tag or --clear-tags must be specified")
 			}
 
 			s := output.NewSpinner("Updating bucket...")
@@ -329,6 +369,8 @@ func bucketUpdateCmd() *cobra.Command {
 	}
 	cmd.Flags().String("versioning", "", "enabled or suspended (versioning cannot be turned off once enabled)")
 	cmd.Flags().Bool("protected", false, "Deletion protection: --protected or --protected=false")
+	cmd.Flags().StringArray("tag", nil, "Tag as key=value (repeatable); replaces every tag of the bucket")
+	cmd.Flags().Bool("clear-tags", false, "Remove every tag of the bucket")
 	return cmd
 }
 

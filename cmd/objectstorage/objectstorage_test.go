@@ -54,7 +54,7 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets":
-		_, _ = w.Write([]byte(`[{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"name":"Infrequent Access"}},
+		_, _ = w.Write([]byte(`[{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"name":"Infrequent Access"},"tags":{"team":"web","env":"prod"}},
 			{"uuid":"` + otherUUID + `","name":"backups","status":"active","tier":{"name":"Infrequent Access"}},
 			{"uuid":"` + uuidNamedUUID + `","name":"` + uuidNamed + `","status":"active","tier":{"name":"Infrequent Access"}}]`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/keys":
@@ -416,5 +416,114 @@ func TestFormatting(t *testing.T) {
 	}
 	if got := formatPrice(0.004); got != "$0.004" {
 		t.Errorf("formatPrice = %q", got)
+	}
+}
+
+func TestBucketListTagFilterAndColumn(t *testing.T) {
+	out, reqs, err := run(t, "s3", "bucket", "list", "--tag", "env=prod", "--tag", "team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := last(reqs).Path; got != "/object-storage/buckets?tag=env%3Dprod&tag=team" {
+		t.Fatalf("path %s", got)
+	}
+	if !strings.Contains(out, "env=prod,team=web") {
+		t.Fatalf("stdout misses the tags:\n%s", out)
+	}
+}
+
+func TestBucketCreateTags(t *testing.T) {
+	_, reqs, err := run(t, "s3", "bucket", "create", "photos", "--tier", "ia", "--tag", "env=prod", "--tag", "note=a=b", "--tag", "team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags, _ := last(reqs).Body["tags"].(map[string]interface{})
+	if len(tags) != 3 || tags["env"] != "prod" || tags["note"] != "a=b" || tags["team"] != "" {
+		t.Fatalf("body %v", last(reqs).Body)
+	}
+	_, reqs, err = run(t, "s3", "bucket", "create", "photos", "--tier", "ia")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := last(reqs).Body["tags"]; ok {
+		t.Fatalf("tags sent without --tag: %v", last(reqs).Body)
+	}
+}
+
+func TestBucketUpdateTags(t *testing.T) {
+	_, reqs, err := run(t, "s3", "bucket", "update", bucketUUID, "--tag", "env=dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := last(reqs)
+	tags, ok := req.Body["tags"].(map[string]interface{})
+	if req.Method != http.MethodPatch || !ok || len(tags) != 1 || tags["env"] != "dev" {
+		t.Fatalf("got %+v", req)
+	}
+	if _, ok := req.Body["versioning"]; ok {
+		t.Fatalf("versioning sent: %v", req.Body)
+	}
+
+	_, reqs, err = run(t, "s3", "bucket", "update", bucketUUID, "--clear-tags")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tags, ok := last(reqs).Body["tags"].(map[string]interface{}); !ok || len(tags) != 0 {
+		t.Fatalf("clear body %v", last(reqs).Body)
+	}
+
+	_, reqs, err = run(t, "s3", "bucket", "update", bucketUUID, "--versioning", "enabled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := last(reqs).Body["tags"]; ok {
+		t.Fatalf("tags sent without tag flags: %v", last(reqs).Body)
+	}
+
+	for _, args := range [][]string{
+		{"--tag", "env=dev", "--clear-tags"},
+		{"--tag", "=prod"},
+		{"--tag", " env=prod"},
+		{"--tag", "env=a", "--tag", "env=b"},
+	} {
+		_, reqs, err := run(t, append([]string{"s3", "bucket", "update", bucketUUID}, args...)...)
+		if err == nil {
+			t.Errorf("%v: expected an error", args)
+		}
+		if len(reqs) != 0 {
+			t.Errorf("%v: sent %d requests before validating", args, len(reqs))
+		}
+	}
+}
+
+func TestUsageTagFilter(t *testing.T) {
+	_, reqs, err := run(t, "s3", "usage", "--tag", "env=prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := last(reqs).Path; got != "/object-storage/usage?tag=env%3Dprod" {
+		t.Fatalf("path %s", got)
+	}
+}
+
+func TestKeyListIgnoresTagFilter(t *testing.T) {
+	_, reqs, err := run(t, "s3", "key", "list", "--tier", "ia")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := last(reqs).Path; got != "/object-storage/keys?tier=infrequent_access" {
+		t.Fatalf("path %s", got)
+	}
+}
+
+func TestFormatTags(t *testing.T) {
+	if got := formatTags(nil, 40); got != "-" {
+		t.Errorf("empty = %q", got)
+	}
+	if got := formatTags(map[string]string{"b": "2", "a": ""}, 40); got != "a=,b=2" {
+		t.Errorf("sorted = %q", got)
+	}
+	if got := formatTags(map[string]string{"k": strings.Repeat("v", 50)}, 20); got != "k="+strings.Repeat("v", 15)+"..." {
+		t.Errorf("truncated = %q", got)
 	}
 }

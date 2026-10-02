@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/CubePathInc/cubecli/internal/api"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
@@ -64,7 +66,7 @@ Buckets accept their uuid or their name.`,
 	return osCmd
 }
 
-// listQuery builds the ?project_id=&tier= query shared by the list endpoints.
+// listQuery builds the ?project_id=&tier=&tag= query shared by the list endpoints.
 func listQuery(cmd *cobra.Command) string {
 	q := url.Values{}
 	if projectID, _ := cmd.Flags().GetInt("project"); projectID > 0 {
@@ -73,6 +75,7 @@ func listQuery(cmd *cobra.Command) string {
 	if tier, _ := cmd.Flags().GetString("tier"); tier != "" {
 		q.Set("tier", normalizeTier(tier))
 	}
+	addTagFilter(cmd, q)
 	if len(q) == 0 {
 		return ""
 	}
@@ -166,6 +169,7 @@ func usageCmd() *cobra.Command {
 			if tier, _ := cmd.Flags().GetString("tier"); tier != "" {
 				q.Set("tier", normalizeTier(tier))
 			}
+			addTagFilter(cmd, q)
 			path := "/object-storage/usage"
 			if len(q) > 0 {
 				path += "?" + q.Encode()
@@ -213,9 +217,10 @@ func usageCmd() *cobra.Command {
 				} `json:"tiers"`
 				Buckets []struct {
 					quantities
-					Name   string  `json:"name"`
-					Status string  `json:"status"`
-					Cost   float64 `json:"cost"`
+					Name   string            `json:"name"`
+					Status string            `json:"status"`
+					Cost   float64           `json:"cost"`
+					Tags   map[string]string `json:"tags"`
 				} `json:"buckets"`
 			}
 			if err := json.Unmarshal(resp, &usage); err != nil {
@@ -251,7 +256,7 @@ func usageCmd() *cobra.Command {
 			}
 			tt.Render()
 
-			bt := output.NewTable("Buckets", []string{"Bucket", "Status", "Storage (GiB-mo)", "Egress", "CDN", "Class A", "Class B", "Cost"})
+			bt := output.NewTable("Buckets", []string{"Bucket", "Status", "Storage (GiB-mo)", "Egress", "CDN", "Class A", "Class B", "Cost", "Tags"})
 			for _, b := range usage.Buckets {
 				bt.AddRow(
 					b.Name,
@@ -262,6 +267,7 @@ func usageCmd() *cobra.Command {
 					formatCountPtr(b.ClassARequests),
 					formatCountPtr(b.ClassBRequests),
 					formatUSD(b.Cost),
+					formatTags(b.Tags, maxTagsColumn),
 				)
 			}
 			bt.Render()
@@ -273,7 +279,76 @@ func usageCmd() *cobra.Command {
 	cmd.Flags().String("period", "", "Month as YYYY-MM (default: current month, up to 12 months back)")
 	cmd.Flags().IntP("project", "p", 0, "Only buckets of this project ID")
 	cmd.Flags().String("tier", "", "Only this tier (slug, uuid or ia)")
+	addTagFilterFlag(cmd)
 	return cmd
+}
+
+// --- tags ---
+
+// maxTagsColumn is the width of the TAGS column in tables; longer lists are cut with "...".
+const maxTagsColumn = 40
+
+// addTagFilterFlag adds the repeatable --tag filter of the list and usage commands.
+func addTagFilterFlag(cmd *cobra.Command) {
+	cmd.Flags().StringArray("tag", nil, "Only buckets with this tag: key (any value) or key=value (repeatable, all must match, up to 10)")
+}
+
+// addTagFilter copies every --tag filter into q as tag=..., which the API splits on the first "=".
+func addTagFilter(cmd *cobra.Command, q url.Values) {
+	if cmd.Flags().Lookup("tag") == nil {
+		return
+	}
+	tags, _ := cmd.Flags().GetStringArray("tag")
+	for _, t := range tags {
+		if t = strings.TrimSpace(t); t != "" {
+			q.Add("tag", t)
+		}
+	}
+}
+
+// parseTags turns --tag key=value flags into a map. A flag without "=" sets an empty value.
+// The API validates the full rules (charset, lengths, reserved prefixes); this only catches
+// what would be ambiguous on the command line.
+func parseTags(flags []string) (map[string]string, error) {
+	tags := make(map[string]string, len(flags))
+	for _, f := range flags {
+		key, value, _ := strings.Cut(f, "=")
+		if key == "" {
+			return nil, fmt.Errorf("invalid --tag %q: expected key=value", f)
+		}
+		if key != strings.TrimSpace(key) {
+			return nil, fmt.Errorf("invalid --tag %q: the key cannot start or end with spaces", f)
+		}
+		if _, dup := tags[key]; dup {
+			return nil, fmt.Errorf("tag %q given more than once", key)
+		}
+		tags[key] = value
+	}
+	if len(tags) > 50 {
+		return nil, fmt.Errorf("a bucket can have at most 50 tags, got %d", len(tags))
+	}
+	return tags, nil
+}
+
+// formatTags renders tags as "k=v,k2=v2" sorted by key, cut to max characters ("-" when none).
+func formatTags(tags map[string]string, max int) string {
+	if len(tags) == 0 {
+		return "-"
+	}
+	keys := make([]string, 0, len(tags))
+	for k := range tags {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = k + "=" + tags[k]
+	}
+	s := strings.Join(parts, ",")
+	if max > 3 && utf8.RuneCountInString(s) > max {
+		return string([]rune(s)[:max-3]) + "..."
+	}
+	return s
 }
 
 // --- resolution helpers ---
