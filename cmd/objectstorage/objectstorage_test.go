@@ -54,7 +54,7 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets":
-		_, _ = w.Write([]byte(`[{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"name":"Infrequent Access"}},
+		_, _ = w.Write([]byte(`[{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"slug":"infrequent_access","name":"Infrequent Access"}},
 			{"uuid":"` + otherUUID + `","name":"backups","status":"active","tier":{"name":"Infrequent Access"}},
 			{"uuid":"` + uuidNamedUUID + `","name":"` + uuidNamed + `","status":"active","tier":{"name":"Infrequent Access"}}]`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/keys":
@@ -69,7 +69,7 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/usage":
 		_, _ = w.Write([]byte(`{"period":"2026-09","metrics_available":false,"total_cost":0.0012,"projected_cost":0.0013,"tiers":[{"tier":{"name":"Infrequent Access"},"storage_gib_month":null,"cost":0.0012,"free_tier":{"storage_gb_month":{"included":5,"used":null}}}],"buckets":[]}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/tiers":
-		_, _ = w.Write([]byte(`[{"slug":"infrequent_access","name":"Infrequent Access","prices":{"storage_gb_month":0.004},"free_tier":{"requests":20000},"accepting_new":true}]`))
+		_, _ = w.Write([]byte(`[{"uuid":"t1","slug":"infrequent_access","name":"Infrequent Access","region":"eu","endpoint":"https://eu.cubestorage.io","prices":{"storage_gb_month":0.004},"free_tier":{"requests":20000},"accepting_new":true}]`))
 	default:
 		_, _ = w.Write([]byte(`{"detail":"ok"}`))
 	}

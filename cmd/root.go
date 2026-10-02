@@ -54,6 +54,11 @@ var rootCmd = &cobra.Command{
 			return nil
 		}
 
+		// A command that can work offline with one of its flags set (s3 presign --endpoint)
+		if flag := cmd.Annotations[objectstorage.SkipAuthUnlessFlagAnnotation]; flag != "" && cmd.Flags().Changed(flag) {
+			return nil
+		}
+
 		cfg := internalConfig.LoadOrEmpty()
 		explicit, _ := cmd.Flags().GetString("profile")
 		p, name, err := cfg.ActiveProfile(explicit)

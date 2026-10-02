@@ -304,6 +304,7 @@ take their uuid or name.
 | `cubecli objectstorage bucket list\|get\|create\|update\|delete` | Bucket management (`create <name> --tier ia`, `delete --purge` also deletes the content) |
 | `cubecli objectstorage key list\|create\|delete` | Access keys; the secret is shown once |
 | `cubecli objectstorage usage [--period YYYY-MM]` | Month usage and cost per tier and bucket |
+| `cubecli objectstorage presign <bucket>/<key> [--expires 1h]` | Temporary download link for one object, signed locally with your access key |
 
 ```bash
 cubecli s3 bucket create photos --tier ia
@@ -314,6 +315,17 @@ aws s3 ls s3://photos --endpoint-url https://eu.cubestorage.io --region eu
 Buckets are private. To serve one publicly, add it as the origin of a CDN zone:
 `cubecli cdn origin create <zone_uuid> --name photos --bucket photos`. Deleting that
 origin disconnects the bucket.
+
+To share one file for a while, sign a presigned URL. It is signed on your machine
+(the secret is never sent), lasts at most 24 hours, always downloads as an
+attachment, and every download counts as egress of the bucket. Deleting the access
+key that signed it cuts the link before it expires. With `--endpoint` no login is needed:
+
+```bash
+export AWS_ACCESS_KEY_ID=CP... AWS_SECRET_ACCESS_KEY=...
+cubecli s3 presign photos/2026/report.pdf --expires 6h
+cubecli s3 presign photos/2026/report.pdf --endpoint https://eu.cubestorage.io --region eu --json
+```
 
 ### Kubernetes
 
