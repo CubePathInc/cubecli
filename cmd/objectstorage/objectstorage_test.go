@@ -79,6 +79,8 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 	case (r.Method == http.MethodPut || r.Method == http.MethodDelete) && r.URL.Path == "/object-storage/buckets/"+bucketUUID+"/lifecycle":
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"detail":"Lifecycle rules are being applied","generation":3,"notes":[]}`))
+	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets/"+bucketUUID:
+		_, _ = w.Write([]byte(`{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"slug":"infrequent_access","name":"Infrequent Access"},"versioning":"off","object_lock":{"enabled":false,"default_retention":null},"encryption":{"algorithm":"AES256","scope":"new_objects"},"connection":{"endpoint":"https://eu.cubestorage.io","region":"eu"}}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/tiers":
 		_, _ = w.Write([]byte(`[{"uuid":"t1","slug":"infrequent_access","name":"Infrequent Access","region":"eu","endpoint":"https://eu.cubestorage.io","prices":{"storage_gb_month":0.004},"free_tier":{"requests":20000},"accepting_new":true}]`))
 	default:
@@ -216,6 +218,22 @@ func TestKeyListEmptyScopeIsNotBlank(t *testing.T) {
 	}
 	if !strings.Contains(out, "none (buckets deleted)") {
 		t.Fatalf("output %s", out)
+	}
+}
+
+func TestBucketGetShowsEncryption(t *testing.T) {
+	out, _, err := run(t, "s3", "bucket", "get", "photos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "AES256 (new objects; older ones are being encrypted)") {
+		t.Fatalf("output %s", out)
+	}
+	if got := formatEncryption(nil); got != "not applied yet" {
+		t.Fatalf("nil: %s", got)
+	}
+	if got := formatEncryption(&bucketEncryption{Algorithm: "AES256", Scope: "all_objects"}); got != "AES256 (all objects)" {
+		t.Fatalf("all: %s", got)
 	}
 }
 

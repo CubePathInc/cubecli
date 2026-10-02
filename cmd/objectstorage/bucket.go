@@ -143,6 +143,7 @@ func bucketGetCmd() *cobra.Command {
 				Tags           map[string]string `json:"tags"`
 				ObjectLock     objectLock        `json:"object_lock"`
 				LockedKept     bool              `json:"locked_content_kept"`
+				Encryption     *bucketEncryption `json:"encryption"`
 				Connection     struct {
 					Endpoint       string `json:"endpoint"`
 					Region         string `json:"region"`
@@ -190,6 +191,7 @@ func bucketGetCmd() *cobra.Command {
 			info.AddRow("Virtual host URL", b.Connection.VirtualHostURL)
 			info.AddRow("Versioning", b.Versioning)
 			info.AddRow("Object Lock", formatLock(b.ObjectLock))
+			info.AddRow("Encryption", formatEncryption(b.Encryption))
 			if b.LockedKept {
 				info.AddRow("Locked content kept", "yes (the last delete kept versions still under retention or legal hold)")
 			}
