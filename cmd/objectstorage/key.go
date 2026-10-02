@@ -57,12 +57,13 @@ func keyListCmd() *cobra.Command {
 				Tier      tierSummary `json:"tier"`
 				Status    string      `json:"status"`
 				ExpiresAt *string     `json:"expires_at"`
+				Bypass    bool        `json:"bypass_governance"`
 			}
 			if err := json.Unmarshal(resp, &keys); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("Access Keys", []string{"UUID", "Name", "Access Key ID", "Permission", "Buckets", "Tier", "Project", "Status", "Expires"})
+			t := output.NewTable("Access Keys", []string{"UUID", "Name", "Access Key ID", "Permission", "Gov. bypass", "Buckets", "Tier", "Project", "Status", "Expires"})
 			for _, k := range keys {
 				scope := "all"
 				if k.BucketScope != nil {
@@ -85,6 +86,7 @@ func keyListCmd() *cobra.Command {
 					k.Name,
 					k.AccessKeyID,
 					k.Permission,
+					yesNo(k.Bypass),
 					scope,
 					k.Tier.Name,
 					intPtr(k.ProjectID),
@@ -116,7 +118,11 @@ present and future. --output prints ready-to-use credentials:
 
   env     .env file with the standard AWS_* variables
   rclone  rclone.conf remote
-  aws     ~/.aws/credentials profile (with region and endpoint_url)`,
+  aws     ~/.aws/credentials profile (with region and endpoint_url)
+
+--bypass-governance (read_write keys only) lets the key delete versions under
+governance retention in buckets with Object Lock, sending the
+x-amz-bypass-governance-retention header. It cannot be changed later.`,
 		Example: `  cubecli s3 key create --name backups --tier ia
   cubecli s3 key create --name web --tier ia --bucket photos --permission read_only --output env > .env.cubepath-storage
   cubecli s3 key create --name nightly --tier ia --expires-in 720h --output rclone >> ~/.config/rclone/rclone.conf`,
@@ -131,12 +137,16 @@ present and future. --output prints ready-to-use credentials:
 			format, _ := cmd.Flags().GetString("output")
 			expiresAt, _ := cmd.Flags().GetString("expires-at")
 			expiresIn, _ := cmd.Flags().GetString("expires-in")
+			bypass, _ := cmd.Flags().GetBool("bypass-governance")
 
 			if format != "" && credentialWriters[format] == nil {
 				return fmt.Errorf("unknown --output %q: use env, rclone or aws", format)
 			}
 			if permission != "read_write" && permission != "read_only" {
 				return fmt.Errorf("--permission must be read_write or read_only")
+			}
+			if bypass && permission != "read_write" {
+				return fmt.Errorf("--bypass-governance can only be given to read_write keys")
 			}
 			expiry, err := parseExpiry(expiresAt, expiresIn, time.Now())
 			if err != nil {
@@ -153,6 +163,9 @@ present and future. --output prints ready-to-use credentials:
 			}
 			if expiry != "" {
 				body["expires_at"] = expiry
+			}
+			if bypass {
+				body["bypass_governance"] = true
 			}
 
 			s := output.NewSpinner("Creating access key...")
@@ -193,6 +206,9 @@ present and future. --output prints ready-to-use credentials:
 			info.AddRow("Access key ID", key.AccessKeyID)
 			info.AddRow("Secret access key", key.SecretAccessKey)
 			info.AddRow("Permission", key.Permission)
+			if key.BypassGovernance {
+				info.AddRow("Governance bypass", "yes")
+			}
 			info.AddRow("Endpoint", key.Endpoint)
 			info.AddRow("Region", key.Region)
 			info.AddRow("Status", output.FormatStatus(key.Status))
@@ -209,6 +225,7 @@ present and future. --output prints ready-to-use credentials:
 	cmd.Flags().String("expires-at", "", "Expiry time, UTC (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS, or RFC 3339)")
 	cmd.Flags().String("expires-in", "", "Expiry from now: a duration such as 720h or 30d")
 	cmd.Flags().StringP("output", "o", "", "Print the credentials as env, rclone or aws")
+	cmd.Flags().Bool("bypass-governance", false, "Allow deleting versions under governance retention (read_write keys only)")
 	_ = cmd.MarkFlagRequired("name")
 	_ = cmd.MarkFlagRequired("tier")
 	cmd.MarkFlagsMutuallyExclusive("expires-at", "expires-in")
@@ -300,6 +317,8 @@ type createdKey struct {
 	Region          string `json:"region"`
 	Endpoint        string `json:"endpoint"`
 	Status          string `json:"status"`
+	// BypassGovernance is not part of the credential files.
+	BypassGovernance bool `json:"bypass_governance"`
 }
 
 // The credential files match the dashboard's show-once dialog

@@ -55,7 +55,7 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/buckets":
 		_, _ = w.Write([]byte(`[{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"slug":"infrequent_access","name":"Infrequent Access"},"tags":{"team":"web","env":"prod"}},
-			{"uuid":"` + otherUUID + `","name":"backups","status":"active","tier":{"name":"Infrequent Access"}},
+			{"uuid":"` + otherUUID + `","name":"backups","status":"active","tier":{"name":"Infrequent Access"},"object_lock":{"enabled":true,"default_retention":{"mode":"governance","days":30,"years":null}}},
 			{"uuid":"` + uuidNamedUUID + `","name":"` + uuidNamed + `","status":"active","tier":{"name":"Infrequent Access"}}]`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/keys":
 		_, _ = w.Write([]byte(`[{"uuid":"` + keyUUID + `","name":"web","access_key_id":"CP7Q2M9XK4B1N8R5T3W6","permission":"read_only","bucket_scope":null,"status":"active"},
@@ -585,5 +585,183 @@ func TestBucketMetricsRejectsBadFlags(t *testing.T) {
 	}
 	if _, _, err := run(t, "s3", "bucket", "metrics", "photos", "--part", "latency"); err == nil || !strings.Contains(err.Error(), "unknown part") {
 		t.Fatalf("err %v", err)
+	}
+}
+
+func TestBucketCreateObjectLock(t *testing.T) {
+	_, reqs, err := run(t, "s3", "bucket", "create", "veeam", "--tier", "ia", "--object-lock",
+		"--lock-mode", "governance", "--lock-days", "30", "--accept-object-lock-terms")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := last(reqs).Body
+	if b["object_lock"] != true || b["accept_object_lock_terms"] != true || b["versioning"] != true {
+		t.Fatalf("body %v", b)
+	}
+	rule, _ := b["object_lock_default"].(map[string]interface{})
+	if rule["mode"] != "governance" || rule["days"] != float64(30) {
+		t.Fatalf("object_lock_default %v", b["object_lock_default"])
+	}
+	if _, ok := rule["years"]; ok {
+		t.Fatalf("years sent with --lock-days: %v", rule)
+	}
+
+	// Without a default retention.
+	_, reqs, err = run(t, "s3", "bucket", "create", "veeam", "--tier", "ia", "--object-lock", "--accept-object-lock-terms")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := last(reqs).Body; b["object_lock"] != true || b["versioning"] != true {
+		t.Fatalf("body %v", b)
+	} else if _, ok := b["object_lock_default"]; ok {
+		t.Fatalf("object_lock_default sent without --lock-mode: %v", b)
+	}
+
+	// No lock fields on a normal bucket.
+	_, reqs, _ = run(t, "s3", "bucket", "create", "photos", "--tier", "ia")
+	if _, ok := last(reqs).Body["object_lock"]; ok {
+		t.Fatalf("object_lock sent without --object-lock: %v", last(reqs).Body)
+	}
+}
+
+func TestBucketCreateComplianceNeedsYes(t *testing.T) {
+	base := []string{"s3", "bucket", "create", "archive", "--tier", "ia", "--object-lock",
+		"--lock-mode", "compliance", "--lock-years", "7", "--accept-object-lock-terms"}
+	// Without --yes it asks (or refuses without a terminal) and sends nothing.
+	if _, reqs, _ := run(t, base...); len(reqs) != 0 {
+		t.Fatalf("sent %d requests without --yes", len(reqs))
+	}
+	_, reqs, err := run(t, append(base, "--yes")...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule, _ := last(reqs).Body["object_lock_default"].(map[string]interface{})
+	if rule["mode"] != "compliance" || rule["years"] != float64(7) {
+		t.Fatalf("object_lock_default %v", rule)
+	}
+}
+
+func TestBucketCreateObjectLockRejectsBadInput(t *testing.T) {
+	for _, args := range [][]string{
+		{"--object-lock"}, // terms not accepted
+		{"--object-lock", "--accept-object-lock-terms", "--versioning=false"},
+		{"--lock-mode", "governance", "--lock-days", "3"}, // no --object-lock
+		{"--object-lock", "--accept-object-lock-terms", "--lock-mode", "strict", "--lock-days", "3"},
+		{"--object-lock", "--accept-object-lock-terms", "--lock-mode", "governance"},
+		{"--object-lock", "--accept-object-lock-terms", "--lock-mode", "governance", "--lock-days", "0"},
+		{"--object-lock", "--accept-object-lock-terms", "--lock-mode", "governance", "--lock-days", "3", "--lock-years", "1"},
+	} {
+		base := []string{"s3", "bucket", "create", "veeam", "--tier", "ia"}
+		_, reqs, err := run(t, append(base, args...)...)
+		if err == nil {
+			t.Errorf("%v: expected an error", args)
+		}
+		if len(reqs) != 0 {
+			t.Errorf("%v: sent %d requests before validating", args, len(reqs))
+		}
+	}
+}
+
+func TestBucketObjectLockSet(t *testing.T) {
+	_, reqs, err := run(t, "s3", "bucket", "object-lock", "set", "photos", "--mode", "governance", "--years", "1", "--accept-object-lock-terms")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := last(reqs)
+	if req.Method != http.MethodPut || req.Path != "/object-storage/buckets/"+bucketUUID+"/object-lock" {
+		t.Fatalf("got %+v", req)
+	}
+	rule, _ := req.Body["default_retention"].(map[string]interface{})
+	if rule["mode"] != "governance" || rule["years"] != float64(1) || req.Body["accept_object_lock_terms"] != true {
+		t.Fatalf("body %v", req.Body)
+	}
+
+	_, reqs, err = run(t, "s3", "bucket", "object-lock", "set", bucketUUID, "--remove")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = last(reqs)
+	if v, ok := req.Body["default_retention"]; !ok || v != nil || req.Body["accept_object_lock_terms"] != false {
+		t.Fatalf("body %v", req.Body)
+	}
+
+	for _, args := range [][]string{
+		{},
+		{"--remove", "--mode", "governance"},
+		{"--mode", "governance", "--days", "1", "--years", "1"},
+	} {
+		_, reqs, err := run(t, append([]string{"s3", "bucket", "object-lock", "set", bucketUUID}, args...)...)
+		if err == nil || len(reqs) != 0 {
+			t.Errorf("%v: expected an error and no request, got %v, %d requests", args, err, len(reqs))
+		}
+	}
+	// Compliance without --yes asks (or refuses without a terminal) and sends nothing.
+	if _, reqs, _ := run(t, "s3", "bucket", "object-lock", "set", bucketUUID, "--mode", "compliance", "--days", "10"); len(reqs) != 0 {
+		t.Fatalf("sent %d requests without --yes", len(reqs))
+	}
+	_, reqs, err = run(t, "s3", "bucket", "object-lock", "set", bucketUUID, "--mode", "compliance", "--days", "10", "--accept-object-lock-terms", "--yes")
+	if err != nil || last(reqs).Method != http.MethodPut {
+		t.Fatalf("compliance with --yes: %v %+v", err, reqs)
+	}
+}
+
+func TestBucketDeleteBypassGovernance(t *testing.T) {
+	_, reqs, err := run(t, "s3", "bucket", "delete", bucketUUID, "--purge", "--bypass-governance", "--force")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := last(reqs).Path; got != "/object-storage/buckets/"+bucketUUID+"?force=true&bypass_governance=true" {
+		t.Fatalf("path %s", got)
+	}
+	if _, reqs, err := run(t, "s3", "bucket", "delete", bucketUUID, "--bypass-governance", "--force"); err == nil || len(reqs) != 0 {
+		t.Fatal("expected an error for --bypass-governance without --purge")
+	}
+}
+
+func TestKeyCreateBypassGovernance(t *testing.T) {
+	_, reqs, err := run(t, "s3", "key", "create", "--name", "veeam", "--tier", "ia", "--bypass-governance", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last(reqs).Body["bypass_governance"] != true {
+		t.Fatalf("body %v", last(reqs).Body)
+	}
+	_, reqs, _ = run(t, "s3", "key", "create", "--name", "web", "--tier", "ia", "--json")
+	if _, ok := last(reqs).Body["bypass_governance"]; ok {
+		t.Fatalf("bypass_governance sent without the flag: %v", last(reqs).Body)
+	}
+	if _, reqs, err := run(t, "s3", "key", "create", "--name", "ro", "--tier", "ia", "--permission", "read_only", "--bypass-governance"); err == nil || len(reqs) != 0 {
+		t.Fatal("expected an error for a read_only key with --bypass-governance")
+	}
+}
+
+func TestLockFormatting(t *testing.T) {
+	d, y := 30, 7
+	cases := []struct {
+		l          objectLock
+		col, field string
+	}{
+		{objectLock{}, "-", "off"},
+		{objectLock{Enabled: true}, "on", "on, no default retention"},
+		{objectLock{Enabled: true, DefaultRetention: &lockRetention{Mode: "governance", Days: &d}}, "governance 30d", "on, default retention governance 30d"},
+		{objectLock{Enabled: true, DefaultRetention: &lockRetention{Mode: "compliance", Years: &y}}, "compliance 7y", "on, default retention compliance 7y"},
+	}
+	for _, c := range cases {
+		if got := formatLockColumn(c.l); got != c.col {
+			t.Errorf("formatLockColumn(%+v) = %q, want %q", c.l, got, c.col)
+		}
+		if got := formatLock(c.l); got != c.field {
+			t.Errorf("formatLock(%+v) = %q, want %q", c.l, got, c.field)
+		}
+	}
+}
+
+func TestBucketListLockColumn(t *testing.T) {
+	out, _, err := run(t, "s3", "bucket", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Lock") || !strings.Contains(out, "governance 30d") {
+		t.Fatalf("output %s", out)
 	}
 }

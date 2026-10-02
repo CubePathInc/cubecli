@@ -24,6 +24,7 @@ func bucketCmd() *cobra.Command {
 		bucketDeleteCmd(),
 		bucketMetricsCmd(),
 		bucketLifecycleCmd(),
+		bucketObjectLockCmd(),
 	)
 	return cmd
 }
@@ -62,12 +63,13 @@ func bucketListCmd() *cobra.Command {
 				MonthlyCharges float64           `json:"monthly_charges"`
 				CDNConnected   bool              `json:"cdn_connected"`
 				Tags           map[string]string `json:"tags"`
+				ObjectLock     objectLock        `json:"object_lock"`
 			}
 			if err := json.Unmarshal(resp, &buckets); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("Buckets", []string{"UUID", "Name", "Status", "Tier", "Project", "Size", "Objects", "Versioning", "CDN", "Protected", "This month", "Tags"})
+			t := output.NewTable("Buckets", []string{"UUID", "Name", "Status", "Tier", "Project", "Size", "Objects", "Versioning", "Lock", "CDN", "Protected", "This month", "Tags"})
 			for _, b := range buckets {
 				t.AddRow(
 					b.UUID,
@@ -78,6 +80,7 @@ func bucketListCmd() *cobra.Command {
 					formatBytes(b.SizeBytes),
 					formatCount(b.ObjectsCount),
 					b.Versioning,
+					formatLockColumn(b.ObjectLock),
 					yesNo(b.CDNConnected),
 					yesNo(b.Protected),
 					formatUSD(b.MonthlyCharges),
@@ -138,6 +141,8 @@ func bucketGetCmd() *cobra.Command {
 				UsageUpdatedAt *string           `json:"usage_updated_at"`
 				MonthlyCharges float64           `json:"monthly_charges"`
 				Tags           map[string]string `json:"tags"`
+				ObjectLock     objectLock        `json:"object_lock"`
+				LockedKept     bool              `json:"locked_content_kept"`
 				Connection     struct {
 					Endpoint       string `json:"endpoint"`
 					Region         string `json:"region"`
@@ -184,6 +189,10 @@ func bucketGetCmd() *cobra.Command {
 			info.AddRow("Path style URL", b.Connection.PathStyleURL)
 			info.AddRow("Virtual host URL", b.Connection.VirtualHostURL)
 			info.AddRow("Versioning", b.Versioning)
+			info.AddRow("Object Lock", formatLock(b.ObjectLock))
+			if b.LockedKept {
+				info.AddRow("Locked content kept", "yes (the last delete kept versions still under retention or legal hold)")
+			}
 			info.AddRow("Protected", yesNo(b.Protected))
 			info.AddRow("Tags", formatTags(b.Tags, 0))
 			info.AddRow("Size", formatBytes(b.SizeBytes))
@@ -239,10 +248,22 @@ The bucket is created asynchronously: it is usable once its status is active
 
 Tags are labels to organize and filter buckets (at most 50; key up to 128 and
 value up to 256 characters). They are managed with cubecli, the API and the
-dashboard only: S3 bucket tagging calls are not supported.`,
+dashboard only: S3 bucket tagging calls are not supported.
+
+--object-lock creates the bucket with Object Lock (WORM): object versions cannot
+be deleted or overwritten until their retention date. It can only be turned on
+now, never later, and implies versioning and deletion protection. It needs
+--accept-object-lock-terms. An optional default retention applies to every new
+version:
+
+  governance  keys created with --bypass-governance can still delete
+  compliance  nobody can delete or shorten it before its date, CubePath included
+              (asks for confirmation unless --yes)`,
 		Example: `  cubecli objectstorage bucket create photos --tier ia
   cubecli s3 bucket create backups --tier infrequent_access --project 12 --versioning
-  cubecli s3 bucket create logs --tier ia --tag env=prod --tag team=data`,
+  cubecli s3 bucket create logs --tier ia --tag env=prod --tag team=data
+  cubecli s3 bucket create veeam --tier ia --object-lock --accept-object-lock-terms
+  cubecli s3 bucket create archive --tier ia --object-lock --lock-mode governance --lock-days 30 --accept-object-lock-terms`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
@@ -256,10 +277,50 @@ dashboard only: S3 bucket tagging calls are not supported.`,
 				return err
 			}
 
+			objectLockOn, _ := cmd.Flags().GetBool("object-lock")
+			lockMode, _ := cmd.Flags().GetString("lock-mode")
+			lockDays, _ := cmd.Flags().GetInt("lock-days")
+			lockYears, _ := cmd.Flags().GetInt("lock-years")
+			acceptTerms, _ := cmd.Flags().GetBool("accept-object-lock-terms")
+			lockDefault, err := parseRetention(lockMode, lockDays, lockYears,
+				cmd.Flags().Changed("lock-days"), cmd.Flags().Changed("lock-years"), "lock-")
+			if err != nil {
+				return err
+			}
+			if objectLockOn {
+				if cmd.Flags().Changed("versioning") && !versioning {
+					return fmt.Errorf("--object-lock requires versioning: drop --versioning=false")
+				}
+				if !acceptTerms {
+					return fmt.Errorf("--object-lock requires --accept-object-lock-terms")
+				}
+				// Object Lock always creates the bucket with versioning enabled.
+				versioning = true
+			} else if lockDefault != nil {
+				return fmt.Errorf("--lock-mode, --lock-days and --lock-years need --object-lock")
+			}
+			if lockMode == "compliance" {
+				ok, err := confirmCompliance(cmd, fmt.Sprintf("Create bucket %s with a compliance default retention?", args[0]))
+				if err != nil {
+					return err
+				}
+				if !ok {
+					output.PrintWarning("Aborted")
+					return nil
+				}
+			}
+
 			body := map[string]interface{}{
 				"name":       args[0],
 				"tier":       normalizeTier(tier),
 				"versioning": versioning,
+			}
+			if objectLockOn {
+				body["object_lock"] = true
+				body["accept_object_lock_terms"] = true
+				if lockDefault != nil {
+					body["object_lock_default"] = lockDefault
+				}
 			}
 			if projectID > 0 {
 				body["project_id"] = projectID
@@ -290,6 +351,9 @@ dashboard only: S3 bucket tagging calls are not supported.`,
 				if result.Endpoint != "" {
 					output.PrintInfo(fmt.Sprintf("Endpoint: %s", result.Endpoint))
 				}
+				if objectLockOn {
+					output.PrintInfo("Object Lock is on: the bucket keeps versioning enabled and starts with deletion protection.")
+				}
 			} else {
 				output.PrintSuccess("Bucket creation initiated")
 			}
@@ -300,6 +364,13 @@ dashboard only: S3 bucket tagging calls are not supported.`,
 	cmd.Flags().IntP("project", "p", 0, "Project ID (default: the organization's first project)")
 	cmd.Flags().Bool("versioning", false, "Enable object versioning")
 	cmd.Flags().StringArray("tag", nil, "Tag as key=value (repeatable)")
+	cmd.Flags().Bool("object-lock", false, "Create the bucket with Object Lock (only possible now, never later)")
+	cmd.Flags().String("lock-mode", "", "Default retention mode: governance or compliance")
+	cmd.Flags().Int("lock-days", 0, "Default retention in days")
+	cmd.Flags().Int("lock-years", 0, "Default retention in years")
+	cmd.Flags().Bool("accept-object-lock-terms", false, "Accept the Object Lock terms (required with --object-lock)")
+	cmd.Flags().BoolP("yes", "y", false, "Skip the compliance confirmation prompt")
+	cmd.MarkFlagsMutuallyExclusive("lock-days", "lock-years")
 	_ = cmd.MarkFlagRequired("tier")
 	return cmd
 }
@@ -386,13 +457,26 @@ func bucketDeleteCmd() *cobra.Command {
 the bucket stays active and shows the error. With --purge every object, version
 and pending upload is deleted first, which cannot be undone.
 
+On a bucket with Object Lock, versions still under retention or legal hold are
+kept: the bucket stays with "Locked content kept" until their retention ends,
+and keeps being billed. --bypass-governance (with --purge) also deletes the
+versions under governance retention; compliance versions can never be deleted
+early.
+
 The bucket name stays reserved for your organization for 90 days.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			purge, _ := cmd.Flags().GetBool("purge")
+			bypass, _ := cmd.Flags().GetBool("bypass-governance")
+			if bypass && !purge {
+				return fmt.Errorf("--bypass-governance can only be used together with --purge")
+			}
 			msg := fmt.Sprintf("Are you sure you want to delete bucket %s?", args[0])
 			if purge {
 				msg = fmt.Sprintf("Delete bucket %s and ALL its objects and versions? This cannot be undone.", args[0])
+			}
+			if bypass {
+				msg = fmt.Sprintf("Delete bucket %s and ALL its objects and versions, including those under governance retention? This cannot be undone.", args[0])
 			}
 			if !cmdutil.CheckForce(cmd, msg) {
 				output.PrintWarning("Aborted")
@@ -410,6 +494,9 @@ The bucket name stays reserved for your organization for 90 days.`,
 				path = "/object-storage/buckets/" + uuid
 				if purge {
 					path += "?force=true"
+				}
+				if bypass {
+					path += "&bypass_governance=true"
 				}
 				resp, err = client.Delete(path)
 			}
@@ -430,6 +517,7 @@ The bucket name stays reserved for your organization for 90 days.`,
 		},
 	}
 	cmd.Flags().Bool("purge", false, "Also delete every object and version in the bucket (the API's force delete)")
+	cmd.Flags().Bool("bypass-governance", false, "With --purge on a bucket with Object Lock: also delete versions under governance retention")
 	cmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 	return cmd
 }
