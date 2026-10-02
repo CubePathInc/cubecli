@@ -307,7 +307,6 @@ take their uuid or name.
 | `cubecli objectstorage usage [--period YYYY-MM] [--tag k=v]` | Month usage and cost per tier and bucket |
 | `cubecli objectstorage presign <bucket>/<key> [--expires 1h]` | Temporary download link for one object, signed locally with your access key |
 | `cubecli objectstorage bucket metrics <bucket> [--range 24h] [--part storage,traffic,responses]` | Stored size, traffic and responses over 1h to 30d (needs an API token: GraphQL) |
-| `cubecli objectstorage bucket encryption enable <bucket>` | Turn on encryption at rest (AES-256) for a bucket created with `--no-encryption`; existing objects are encrypted in the background; cannot be turned off |
 | `cubecli objectstorage bucket lifecycle get\|set\|delete <bucket>` | Lifecycle rules: `set --file rules.json` (or `-` for stdin) or `set --expire-days 30 --prefix logs/`; `--wait` until applied |
 
 ```bash
@@ -318,11 +317,6 @@ cubecli s3 key create --name backups --tier ia --output env > .env.cubepath-stor
 aws s3 ls s3://photos --endpoint-url https://eu.cubestorage.io --region eu
 cubecli s3 bucket metrics photos --range 7d --part traffic        # egress, CDN and requests of the week
 ```
-
-Encryption at rest (AES-256) is on for new buckets unless `bucket create --no-encryption`.
-It can be enabled later with `bucket encryption enable` (the objects already stored are
-encrypted in the background; in a versioned bucket only the current versions) and never
-turned off. `bucket get` shows it.
 
 Lifecycle rules delete objects in the background, permanently. They are set through
 cubecli, the API and the dashboard (the S3 `PutBucketLifecycleConfiguration` call

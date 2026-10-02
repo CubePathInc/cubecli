@@ -83,9 +83,6 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"uuid":"` + bucketUUID + `","name":"photos","status":"active","tier":{"slug":"infrequent_access","name":"Infrequent Access"},"versioning":"off","object_lock":{"enabled":false,"default_retention":null},"encryption":{"algorithm":"AES256","scope":"new_objects"},"connection":{"endpoint":"https://eu.cubestorage.io","region":"eu"}}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/tiers":
 		_, _ = w.Write([]byte(`[{"uuid":"t1","slug":"infrequent_access","name":"Infrequent Access","region":"eu","endpoint":"https://eu.cubestorage.io","prices":{"storage_gb_month":0.004},"free_tier":{"requests":20000},"accepting_new":true}]`))
-	case r.Method == http.MethodPut && r.URL.Path == "/object-storage/buckets/"+bucketUUID+"/encryption":
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"detail":"Encryption at rest is being enabled","reencrypt_job_id":7}`))
 	default:
 		_, _ = w.Write([]byte(`{"detail":"ok"}`))
 	}
@@ -166,29 +163,8 @@ func TestBucketCreateSendsTierSlug(t *testing.T) {
 		t.Fatalf("got %+v", req)
 	}
 	if req.Body["name"] != "photos" || req.Body["tier"] != "infrequent_access" ||
-		req.Body["project_id"] != float64(12) || req.Body["versioning"] != true || req.Body["encryption"] != true {
+		req.Body["project_id"] != float64(12) || req.Body["versioning"] != true {
 		t.Fatalf("body %v", req.Body)
-	}
-}
-
-func TestBucketCreateWithoutEncryption(t *testing.T) {
-	_, reqs, err := run(t, "s3", "bucket", "create", "scratch", "--tier", "ia", "--no-encryption")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if body := last(reqs).Body; body["encryption"] != false {
-		t.Fatalf("body %v", body)
-	}
-}
-
-func TestBucketEncryptionEnable(t *testing.T) {
-	_, reqs, err := run(t, "s3", "bucket", "encryption", "enable", "photos", "--force")
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := last(reqs)
-	if req.Method != http.MethodPut || req.Path != "/object-storage/buckets/"+bucketUUID+"/encryption" || req.Body["enabled"] != true {
-		t.Fatalf("got %+v", req)
 	}
 }
 
@@ -253,7 +229,7 @@ func TestBucketGetShowsEncryption(t *testing.T) {
 	if !strings.Contains(out, "AES256 (new objects; older ones are being encrypted)") {
 		t.Fatalf("output %s", out)
 	}
-	if got := formatEncryption(nil); got != "off" {
+	if got := formatEncryption(nil); got != "not applied yet" {
 		t.Fatalf("nil: %s", got)
 	}
 	if got := formatEncryption(&bucketEncryption{Algorithm: "AES256", Scope: "all_objects"}); got != "AES256 (all objects)" {

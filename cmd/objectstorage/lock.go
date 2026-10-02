@@ -52,16 +52,15 @@ func formatLockColumn(l objectLock) string {
 
 // formatLock is the "Object Lock" row of bucket get.
 // bucketEncryption is the bucket's encryption at rest (SSE-S3); the API sends
-// null while it is off.
+// null until the bucket default is applied.
 type bucketEncryption struct {
 	Algorithm string `json:"algorithm"`
 	Scope     string `json:"scope"`
-	AppliedAt string `json:"applied_at"`
 }
 
 func formatEncryption(e *bucketEncryption) string {
 	if e == nil {
-		return "off"
+		return "not applied yet"
 	}
 	if e.Scope == "new_objects" {
 		return e.Algorithm + " (new objects; older ones are being encrypted)"
