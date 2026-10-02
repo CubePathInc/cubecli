@@ -68,6 +68,11 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"detail":"Bucket is being created","uuid":"` + bucketUUID + `","name":"photos","status":"pending","endpoint":"https://eu.cubestorage.io"}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/usage":
 		_, _ = w.Write([]byte(`{"period":"2026-09","metrics_available":false,"total_cost":0.0012,"projected_cost":0.0013,"tiers":[{"tier":{"name":"Infrequent Access"},"storage_gib_month":null,"cost":0.0012,"free_tier":{"storage_gb_month":{"included":5,"used":null}}}],"buckets":[]}`))
+	case r.Method == http.MethodPost && r.URL.Path == "/graphql":
+		_, _ = w.Write([]byte(`{"data":{"objectStorageBucket":{"uuid":"` + bucketUUID + `","name":"photos","storageMeasuredAt":1759400000,
+			"storage":{"start":1,"end":2,"step":3600,"series":[{"name":"size_bytes","unit":"BYTES","points":[{"ts":1,"value":1024},{"ts":2,"value":2048}]}]},
+			"traffic":{"start":1,"end":2,"step":300,"series":[{"name":"egress_bytes","unit":"BYTES","points":[{"ts":1,"value":1048576},{"ts":2,"value":1048576}]},{"name":"class_b_requests","unit":"COUNT","points":[{"ts":1,"value":1000},{"ts":2,"value":234}]}]},
+			"responses":{"start":1,"end":2,"step":300,"series":[{"name":"responses_4xx","unit":"COUNT","points":[{"ts":1,"value":3}]}]}}}}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/object-storage/tiers":
 		_, _ = w.Write([]byte(`[{"uuid":"t1","slug":"infrequent_access","name":"Infrequent Access","region":"eu","endpoint":"https://eu.cubestorage.io","prices":{"storage_gb_month":0.004},"free_tier":{"requests":20000},"accepting_new":true}]`))
 	default:
@@ -525,5 +530,54 @@ func TestFormatTags(t *testing.T) {
 	}
 	if got := formatTags(map[string]string{"k": strings.Repeat("v", 50)}, 20); got != "k="+strings.Repeat("v", 15)+"..." {
 		t.Errorf("truncated = %q", got)
+	}
+}
+
+func TestBucketMetricsQueryAndTotals(t *testing.T) {
+	out, reqs, err := run(t, "s3", "bucket", "metrics", "photos", "--range", "7d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := last(reqs)
+	if req.Method != http.MethodPost || req.Path != "/graphql" {
+		t.Fatalf("got %+v", req)
+	}
+	vars, _ := req.Body["variables"].(map[string]interface{})
+	if vars["uuid"] != bucketUUID || vars["range"] != "D7" {
+		t.Fatalf("variables %v", vars)
+	}
+	query, _ := req.Body["query"].(string)
+	for _, part := range []string{"storageMeasuredAt", "storage(range: $range)", "traffic(range: $range)", "responses(range: $range)"} {
+		if !strings.Contains(query, part) {
+			t.Fatalf("query misses %s: %s", part, query)
+		}
+	}
+	for _, want := range []string{"2.0 KiB (latest)", "2.0 MiB", "1,234", "egress_bytes", "responses_4xx"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("stdout misses %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestBucketMetricsOnlyRequestedParts(t *testing.T) {
+	_, reqs, err := run(t, "s3", "bucket", "metrics", bucketUUID, "--part", "traffic", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	query, _ := last(reqs).Body["query"].(string)
+	if !strings.Contains(query, "traffic(range: $range)") || strings.Contains(query, "storage") || strings.Contains(query, "responses") {
+		t.Fatalf("query %s", query)
+	}
+	if vars, _ := last(reqs).Body["variables"].(map[string]interface{}); vars["range"] != "H24" {
+		t.Fatalf("default range %v", vars["range"])
+	}
+}
+
+func TestBucketMetricsRejectsBadFlags(t *testing.T) {
+	if _, _, err := run(t, "s3", "bucket", "metrics", "photos", "--range", "2d"); err == nil || !strings.Contains(err.Error(), "invalid range") {
+		t.Fatalf("err %v", err)
+	}
+	if _, _, err := run(t, "s3", "bucket", "metrics", "photos", "--part", "latency"); err == nil || !strings.Contains(err.Error(), "unknown part") {
+		t.Fatalf("err %v", err)
 	}
 }
