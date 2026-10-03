@@ -63,6 +63,7 @@ Buckets accept their uuid or their name.`,
 		usageCmd(),
 		presignCmd(),
 		replicationCmd(),
+		eventsCmd(),
 	)
 
 	return osCmd

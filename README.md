@@ -399,6 +399,24 @@ cubecli s3 presign photos/2026/report.pdf --expires 6h
 cubecli s3 presign photos/2026/report.pdf --endpoint https://eu.cubestorage.io --region eu --json
 ```
 
+Event notifications send what happens in a bucket (objects created, removed or
+tagged) to a signed webhook or to a Slack or Discord channel of Cloud Alerts. The
+signing secret of a webhook is printed only by `create` and `rotate-secret`; after a
+rotation the previous secret keeps signing for 24 hours. Every delivery carries
+`CubePath-Timestamp` and `CubePath-Signature: v1=<hex HMAC-SHA256 of timestamp + "." + raw body>`;
+reject deliveries older than 5 minutes.
+
+```bash
+cubecli s3 events destination create --name uploads-hook --webhook https://example.com/hooks/storage
+cubecli s3 events destination create --name ops --channel <notificator id> --format cubepath
+cubecli s3 events rule create --bucket photos --destination uploads-hook --events created,removed --prefix incoming/ --suffix .jpg
+cubecli s3 events rule list --bucket photos
+cubecli s3 events destination test uploads-hook
+cubecli s3 events destination deliveries uploads-hook --status failed
+cubecli s3 events destination rotate-secret uploads-hook
+cubecli s3 events rule delete on-created-removed --bucket photos
+```
+
 ### Kubernetes
 
 | Command | Description |
