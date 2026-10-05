@@ -36,6 +36,8 @@ func FormatStatus(status string) string {
 		return green.Sprint(status)
 	case "stopped", "paused", "pending", "provisioning", "inactive":
 		return dim.Sprint(status)
+	case "degraded":
+		return yellow.Sprint(status)
 	case "error", "failed", "unhealthy":
 		return red.Sprint(status)
 	default:

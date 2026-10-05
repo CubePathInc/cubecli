@@ -262,7 +262,8 @@ a profile called `default` the first time you run CubeCLI.
 | `cubecli dns zone create <domain> --zone-file <file>\|--scan` | Create and fill a zone |
 | `cubecli dns zone import <uuid> <file>` | Import a BIND zone file |
 | `cubecli dns zone move-project <uuid>` | Move a zone to another project |
-| `cubecli dns health-check list\|show\|set\|delete` | Failover health checks |
+| `cubecli dns healthcheck list\|get\|set\|delete` | Failover health checks (alias `hc`) |
+| `cubecli dns hc history <zone> <record> [--range 24h\|7d\|30d\|90d]` | Uptime per location and recent incidents |
 | `cubecli dns regions` | GeoDNS regions |
 
 ### Load Balancers
