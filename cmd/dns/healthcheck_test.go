@@ -9,19 +9,19 @@ import (
 )
 
 const hcWithSummary = `{"uuid":"h1","record_uuid":"r1","name":"web","check_type":"https","interval_secs":60,"timeout_secs":5,"enabled":true,"last_status":"healthy","last_check_at":"2026-10-05T10:00:00Z",
-"status_summary":{"status":"degraded","nodes_reporting":9,"nodes_unhealthy":2,"pops":[{"pop":"ams01","status":"unhealthy"},{"pop":"bcn01","status":"healthy"}],"last_change_at":"2026-10-05T09:00:00Z"},
+"status_summary":{"status":"degraded","pops":[{"pop":"ams01","status":"unhealthy"},{"pop":"bcn01","status":"healthy"}],"last_change_at":"2026-10-05T09:00:00Z"},
 "uptime_24h":99.5}`
 
 const hcHistory = `{"check_uuid":"h1","time_range":"30d","retention_days":30,"clamped":true,
 "history_starts_at":"2026-09-20T10:00:00Z","start":"2026-09-05T10:00:00Z","end":"2026-10-05T10:00:00Z","bucket_secs":86400,
-"overall":{"status":"degraded","nodes_reporting":9,"nodes_unhealthy":2,"uptime_pct":99.82,"coverage_pct":100.0,"outage_secs":0,"last_change_at":"2026-10-05T09:00:00Z"},
-"pops":[{"pop":"ams01","region":"eu-west","status":"unhealthy","nodes_total":2,"nodes_unhealthy":2,"uptime_pct":97.1,"coverage_pct":100.0,"last_error_kind":"http_status_mismatch","last_http_status":503,"last_latency_ms":null,"last_change_at":"2026-10-05T09:00:00Z"},
-        {"pop":"hou01","region":"us-central","status":"healthy","nodes_total":2,"nodes_unhealthy":0,"uptime_pct":null,"coverage_pct":null,"last_error_kind":null,"last_http_status":null,"last_latency_ms":42,"last_change_at":null}],
+"overall":{"status":"degraded","uptime_pct":99.82,"coverage_pct":100.0,"outage_secs":0,"last_change_at":"2026-10-05T09:00:00Z"},
+"pops":[{"pop":"ams01","region":"eu-west","status":"unhealthy","uptime_pct":97.1,"last_error_kind":"http_status_mismatch","last_change_at":"2026-10-05T09:00:00Z"},
+        {"pop":"bcn01","region":"eu-south","status":"unhealthy","uptime_pct":99.9,"last_error_kind":"tls","last_change_at":"2026-10-05T08:00:00Z"},
+        {"pop":"hou01","region":"us-central","status":"healthy","uptime_pct":null,"last_error_kind":null,"last_change_at":null}],
 "buckets":[],"pop_buckets":{},"markers":[],
-"incidents":[{"pop":"ams01","node_index":1,"started_at":"2026-10-05T09:00:00Z","resolved_at":null,"duration_secs":null,"error_kind":"http_status_mismatch","http_status":503},
-             {"pop":"ams01","node_index":2,"started_at":"2026-10-01T08:00:00Z","resolved_at":"2026-10-01T09:30:00Z","duration_secs":5400,"error_kind":"connection_failed","http_status":null},
-             {"pop":"bcn01","node_index":1,"started_at":"2026-09-30T08:00:00Z","resolved_at":"2026-09-30T08:00:45Z","duration_secs":45,"error_kind":"tls","http_status":null}],
-"events":[],"events_truncated":false}`
+"incidents":[{"pop":"ams01","started_at":"2026-10-05T09:00:00Z","resolved_at":null,"duration_secs":null,"error_kind":"http_status_mismatch","http_status":503},
+             {"pop":"ams01","started_at":"2026-10-01T08:00:00Z","resolved_at":"2026-10-01T09:30:00Z","duration_secs":5400,"error_kind":"connection_failed","http_status":null},
+             {"pop":"bcn01","started_at":"2026-09-30T08:00:00Z","resolved_at":"2026-09-30T08:00:45Z","duration_secs":45,"error_kind":"tls","http_status":null}]}`
 
 func TestHealthCheckAliases(t *testing.T) {
 	for _, group := range []string{"healthcheck", "hc", "health-check"} {
@@ -33,7 +33,7 @@ func TestHealthCheckAliases(t *testing.T) {
 			if r := cmdtest.Last(reqs); r.Method != http.MethodGet || r.Path != "/dns/zones/z1/records/r1/health-check" {
 				t.Fatalf("%s %s: got %s %s", group, sub, r.Method, r.Path)
 			}
-			for _, want := range []string{"degraded (2/9 down)", "ams01 unhealthy", "99.50%", "2026-10-05T09:00:00Z"} {
+			for _, want := range []string{"degraded (down at ams01)", "ams01 unhealthy", "99.50%", "2026-10-05T09:00:00Z"} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("%s %s: missing %q in %s", group, sub, want, out)
 				}
@@ -51,7 +51,7 @@ func TestHealthCheckListSummaryAndFallback(t *testing.T) {
 	if p := cmdtest.Last(reqs).Path; p != "/dns/zones/z1/health-checks" {
 		t.Fatalf("got %s", p)
 	}
-	for _, want := range []string{"degraded (2/9 down)", "99.50%", "unknown", "ping (record value)"} {
+	for _, want := range []string{"degraded (down at ams01)", "99.50%", "unknown", "ping (record value)"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in %s", want, out)
 		}
@@ -116,16 +116,22 @@ func TestHealthCheckHistory(t *testing.T) {
 		t.Fatalf("got %s %s", r.Method, r.Path)
 	}
 	for _, want := range []string{
-		"Health Check History (30d)", "degraded (2/9 nodes down)", "99.82%", "100.00%", "range shortened",
-		"2026-09-20T10:00:00Z", "eu-west", "http_status_mismatch (HTTP 503)", "2/2", "us-central",
-		"Recent Incidents (2 of 3)", "ams01 #1", "ongoing", "connection_failed", "1h 30m",
+		"Health Check History (30d)", "degraded (down at ams01, bcn01)", "99.82%", "100.00%", "range shortened",
+		"2026-09-20T10:00:00Z", "eu-west", "http_status_mismatch (HTTP 503)", "us-central",
+		"Recent Incidents (2 of 3)", "ongoing", "connection_failed", "1h 30m",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in %s", want, out)
 		}
 	}
-	if strings.Contains(out, "bcn01 #1") {
+	if strings.Contains(out, "2026-09-30T08:00:45Z") {
 		t.Fatalf("incident limit not applied: %s", out)
+	}
+	// Locations only: no node counts or node numbers.
+	for _, unwanted := range []string{"Down", "nodes", "#1"} {
+		if strings.Contains(out, unwanted) {
+			t.Fatalf("unexpected %q in %s", unwanted, out)
+		}
 	}
 }
 
@@ -137,7 +143,7 @@ func TestHealthCheckHistoryDefaultsAndJSON(t *testing.T) {
 	if p := cmdtest.Last(reqs).Path; p != "/dns/zones/z1/records/r1/health-check/history?time_range=24h" {
 		t.Fatalf("got %s", p)
 	}
-	if !strings.Contains(out, `"events_truncated"`) {
+	if !strings.Contains(out, `"incidents"`) {
 		t.Fatalf("out %s", out)
 	}
 }
@@ -153,7 +159,7 @@ func TestHealthCheckHistoryRejectsBadRange(t *testing.T) {
 }
 
 func TestHealthCheckHistoryNoIncidents(t *testing.T) {
-	body := `{"time_range":"24h","retention_days":7,"overall":{"status":"healthy","nodes_reporting":9,"nodes_unhealthy":0,"uptime_pct":100,"coverage_pct":100,"outage_secs":0},"pops":[],"incidents":[]}`
+	body := `{"time_range":"24h","retention_days":7,"overall":{"status":"healthy","uptime_pct":100,"coverage_pct":100,"outage_secs":0},"pops":[],"incidents":[]}`
 	out, _, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) { return 200, body }, "hc", "history", "z1", "r1")
 	if err != nil {
 		t.Fatal(err)

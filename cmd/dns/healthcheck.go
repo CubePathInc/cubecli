@@ -20,11 +20,31 @@ type healthCheckPoPStatus struct {
 // healthCheckSummary is the aggregated state across every probing location
 // (status_summary); older API versions do not send it.
 type healthCheckSummary struct {
-	Status         string                 `json:"status"`
-	NodesReporting int                    `json:"nodes_reporting"`
-	NodesUnhealthy int                    `json:"nodes_unhealthy"`
-	PoPs           []healthCheckPoPStatus `json:"pops"`
-	LastChangeAt   *string                `json:"last_change_at"`
+	Status       string                 `json:"status"`
+	PoPs         []healthCheckPoPStatus `json:"pops"`
+	LastChangeAt *string                `json:"last_change_at"`
+}
+
+// failingPoPs lists the locations that currently see the target down.
+func failingPoPs(statuses []healthCheckPoPStatus) []string {
+	var out []string
+	for _, p := range statuses {
+		if p.Status == "unhealthy" {
+			out = append(out, p.PoP)
+		}
+	}
+	return out
+}
+
+// withFailingPoPs appends the failing locations to a degraded status.
+func withFailingPoPs(status string, statuses []healthCheckPoPStatus) string {
+	out := output.FormatStatus(status)
+	if status == "degraded" {
+		if failing := failingPoPs(statuses); len(failing) > 0 {
+			out += " (down at " + strings.Join(failing, ", ") + ")"
+		}
+	}
+	return out
 }
 
 type healthCheck struct {
@@ -59,17 +79,13 @@ func (h healthCheck) probe() string {
 }
 
 // status prefers the aggregated status (healthy, degraded, unhealthy, unknown,
-// paused) and falls back to last_status.
+// paused) and falls back to last_status. Degraded names the failing locations.
 func (h healthCheck) status() string {
 	s := h.StatusSummary
 	if s == nil || s.Status == "" {
 		return output.FormatStatus(h.LastStatus)
 	}
-	out := output.FormatStatus(s.Status)
-	if s.NodesReporting > 0 && s.NodesUnhealthy > 0 {
-		out += fmt.Sprintf(" (%d/%d down)", s.NodesUnhealthy, s.NodesReporting)
-	}
-	return out
+	return withFailingPoPs(s.Status, s.PoPs)
 }
 
 func formatPct(v *float64) string {
@@ -107,22 +123,17 @@ func strOr(s *string, def string) string {
 var healthHistoryRanges = []string{"24h", "7d", "30d", "90d"}
 
 type healthHistoryPoP struct {
-	PoP            string   `json:"pop"`
-	Region         string   `json:"region"`
-	Status         string   `json:"status"`
-	NodesTotal     int      `json:"nodes_total"`
-	NodesUnhealthy int      `json:"nodes_unhealthy"`
-	UptimePct      *float64 `json:"uptime_pct"`
-	CoveragePct    *float64 `json:"coverage_pct"`
-	LastErrorKind  *string  `json:"last_error_kind"`
-	LastHTTPStatus *int     `json:"last_http_status"`
-	LastLatencyMs  *int     `json:"last_latency_ms"`
-	LastChangeAt   *string  `json:"last_change_at"`
+	PoP           string   `json:"pop"`
+	Region        string   `json:"region"`
+	Status        string   `json:"status"`
+	UptimePct     *float64 `json:"uptime_pct"`
+	LastErrorKind *string  `json:"last_error_kind"`
+	LastChangeAt  *string  `json:"last_change_at"`
 }
 
+// healthHistoryIncident is a period in which one location saw the target down.
 type healthHistoryIncident struct {
 	PoP          string  `json:"pop"`
-	NodeIndex    int     `json:"node_index"`
 	StartedAt    string  `json:"started_at"`
 	ResolvedAt   *string `json:"resolved_at"`
 	DurationSecs *int64  `json:"duration_secs"`
@@ -139,13 +150,11 @@ type healthHistory struct {
 	Start           string `json:"start"`
 	End             string `json:"end"`
 	Overall         struct {
-		Status         string   `json:"status"`
-		NodesReporting int      `json:"nodes_reporting"`
-		NodesUnhealthy int      `json:"nodes_unhealthy"`
-		UptimePct      *float64 `json:"uptime_pct"`
-		CoveragePct    *float64 `json:"coverage_pct"`
-		OutageSecs     int64    `json:"outage_secs"`
-		LastChangeAt   *string  `json:"last_change_at"`
+		Status       string   `json:"status"`
+		UptimePct    *float64 `json:"uptime_pct"`
+		CoveragePct  *float64 `json:"coverage_pct"`
+		OutageSecs   int64    `json:"outage_secs"`
+		LastChangeAt *string  `json:"last_change_at"`
 	} `json:"overall"`
 	PoPs      []healthHistoryPoP      `json:"pops"`
 	Incidents []healthHistoryIncident `json:"incidents"`
@@ -419,11 +428,11 @@ func renderHealthHistory(resp json.RawMessage, incidentLimit int) error {
 	o := h.Overall
 
 	t := output.NewTable(fmt.Sprintf("Health Check History (%s)", h.TimeRange), []string{"Field", "Value"})
-	status := output.FormatStatus(o.Status)
-	if o.NodesReporting > 0 {
-		status += fmt.Sprintf(" (%d/%d nodes down)", o.NodesUnhealthy, o.NodesReporting)
+	popStatuses := make([]healthCheckPoPStatus, 0, len(h.PoPs))
+	for _, p := range h.PoPs {
+		popStatuses = append(popStatuses, healthCheckPoPStatus{PoP: p.PoP, Status: p.Status})
 	}
-	t.AddRow("Status", status)
+	t.AddRow("Status", withFailingPoPs(o.Status, popStatuses))
 	t.AddRow("Uptime", formatPct(o.UptimePct))
 	t.AddRow("Coverage", formatPct(o.CoveragePct))
 	t.AddRow("Full Outage", formatSecs(o.OutageSecs))
@@ -440,12 +449,10 @@ func renderHealthHistory(resp json.RawMessage, incidentLimit int) error {
 	t.Render()
 
 	if len(h.PoPs) > 0 {
-		pt := output.NewTable("Locations", []string{"PoP", "Region", "Status", "Down", "Uptime", "Coverage", "Last Error", "Last Change"})
+		pt := output.NewTable("Locations", []string{"PoP", "Region", "Status", "Uptime", "Last Error", "Last Change"})
 		for _, p := range h.PoPs {
-			pt.AddRow(p.PoP, p.Region, output.FormatStatus(p.Status),
-				fmt.Sprintf("%d/%d", p.NodesUnhealthy, p.NodesTotal),
-				formatPct(p.UptimePct), formatPct(p.CoveragePct),
-				lastError(p.LastErrorKind, p.LastHTTPStatus), strOr(p.LastChangeAt, "-"))
+			pt.AddRow(p.PoP, p.Region, output.FormatStatus(p.Status), formatPct(p.UptimePct),
+				lastError(p.LastErrorKind, nil), strOr(p.LastChangeAt, "-"))
 		}
 		pt.Render()
 	}
@@ -469,7 +476,7 @@ func renderHealthHistory(resp json.RawMessage, incidentLimit int) error {
 		if i.DurationSecs != nil {
 			duration = formatSecs(*i.DurationSecs)
 		}
-		it.AddRow(fmt.Sprintf("%s #%d", i.PoP, i.NodeIndex), i.StartedAt, resolved, duration, lastError(i.ErrorKind, i.HTTPStatus))
+		it.AddRow(i.PoP, i.StartedAt, resolved, duration, lastError(i.ErrorKind, i.HTTPStatus))
 	}
 	it.Render()
 	return nil
