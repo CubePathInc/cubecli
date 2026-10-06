@@ -387,6 +387,17 @@ cubecli s3 key create --name veeam --tier ia --bucket veeam --bypass-governance 
 cubecli s3 bucket delete archive --purge --bypass-governance   # also deletes governance versions
 ```
 
+Every bucket stores its objects encrypted with AES-256 (SSE-S3), at no charge;
+there is nothing to configure and it cannot be turned off. `bucket get` shows it in
+the "Encryption" row: `AES256 (all objects)`, `AES256 (new objects; older ones are
+being encrypted)` while objects uploaded before the bucket default may still be
+stored unencrypted, or `not applied yet`. SSE-KMS is not available; SSE-C (your own
+key in each request) works through any S3 client.
+
+```bash
+cubecli s3 bucket get photos
+```
+
 Bucket tags (at most 50 per bucket) are managed with cubecli, the API and the
 dashboard; S3 bucket tagging calls (`GetBucketTagging`, `PutBucketTagging`) answer
 403. Object tags are standard S3 object tagging and work with any S3 client:
