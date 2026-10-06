@@ -11,6 +11,7 @@ import (
 	"time"
 
 	mcpcmd "github.com/CubePathInc/cubecli/cmd/mcp"
+	orgcmd "github.com/CubePathInc/cubecli/cmd/org"
 	skillscmd "github.com/CubePathInc/cubecli/cmd/skills"
 	"github.com/CubePathInc/cubecli/internal/api"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
@@ -454,6 +455,13 @@ func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show how each profile is authenticated",
+		Long: `Show how each profile is authenticated.
+
+For the active profile it also asks the API for the organization's plan (Free,
+Pro, Business or Enterprise, with its renewal or end date). In --json the
+active profile has "plan": null on Free, the plan block of /account/me
+otherwise, and no "plan" key when the API could not be reached. See
+'cubecli org plan' for the details.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := internalConfig.LoadOrEmpty()
 			explicit, _ := cmd.Flags().GetString("profile")
@@ -469,6 +477,8 @@ func newStatusCmd() *cobra.Command {
 				APIURL       string   `json:"api_url"`
 				Scopes       []string `json:"scopes,omitempty"`
 				Access       string   `json:"access,omitempty"`
+				// Only on the active profile; a pointer to "null" means Free.
+				Plan *json.RawMessage `json:"plan,omitempty"`
 			}
 			var rows []row
 			for _, n := range cfg.ProfileNames() {
@@ -494,6 +504,11 @@ func newStatusCmd() *cobra.Command {
 						r.Access = "unusable: log in again with --token"
 					}
 				}
+				if r.Active && p.AuthMethod() != "" && !strings.HasPrefix(r.Access, "unusable") {
+					if raw, ok := accountPlan(statusClient(n, p)); ok {
+						r.Plan = &raw
+					}
+				}
 				rows = append(rows, r)
 			}
 
@@ -510,13 +525,13 @@ func newStatusCmd() *cobra.Command {
 				output.PrintWarning("No profiles configured. Run 'cubecli login'.")
 				return nil
 			}
-			t := output.NewTable("Profiles", []string{"Active", "Profile", "Auth", "Account", "Organization", "Access"})
+			t := output.NewTable("Profiles", []string{"Active", "Profile", "Auth", "Account", "Organization", "Plan", "Access"})
 			for _, r := range rows {
 				active := ""
 				if r.Active {
 					active = "*"
 				}
-				t.AddRow(active, r.Profile, r.Auth, r.Email, r.Organization, r.Access)
+				t.AddRow(active, r.Profile, r.Auth, r.Email, r.Organization, planSummary(r.Plan), r.Access)
 			}
 			t.Render()
 			return nil
@@ -547,6 +562,51 @@ func whoami(baseURL, accessToken string) (email, organization string) {
 		}
 	}
 	return me.Email, organization
+}
+
+// statusClient builds the API client of a profile the same way the root
+// command does, with a short timeout: auth status must not hang offline.
+func statusClient(name string, p *internalConfig.Profile) *api.Client {
+	var client *api.Client
+	if p.OAuth != nil {
+		client = api.NewClientWithAuth(internalConfig.APIURL(p), oauth.NewTokenSource(name, p.OAuth))
+	} else {
+		client = api.NewClient(internalConfig.APIURL(p), p.APIToken)
+	}
+	client.HTTPClient.Timeout = 5 * time.Second
+	return client
+}
+
+// accountPlan returns the raw `plan` block of GET /account/me ("null" on
+// Free), or false when it cannot be read.
+func accountPlan(client *api.Client) (json.RawMessage, bool) {
+	raw, err := client.Get("/account/me")
+	if err != nil {
+		return nil, false
+	}
+	var me struct {
+		Plan json.RawMessage `json:"plan"`
+	}
+	if json.Unmarshal(raw, &me) != nil {
+		return nil, false
+	}
+	if len(me.Plan) == 0 {
+		// An API without the plan block: unknown, not Free.
+		return nil, false
+	}
+	return me.Plan, true
+}
+
+// planSummary renders the plan cell of auth status ("" when not looked up).
+func planSummary(raw *json.RawMessage) string {
+	if raw == nil {
+		return ""
+	}
+	var plan *orgcmd.AccountPlan
+	if json.Unmarshal(*raw, &plan) != nil {
+		return ""
+	}
+	return plan.Summary()
 }
 
 func hasWriteScope(scopes []string) bool {

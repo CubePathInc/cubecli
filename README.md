@@ -61,7 +61,7 @@ cubecli login
 # Log in a named profile
 cubecli login work
 
-# See how every profile is authenticated
+# See how every profile is authenticated (and the active organization's plan)
 cubecli auth status
 
 # Remove the stored credentials
@@ -178,8 +178,16 @@ a profile called `default` the first time you run CubeCLI.
 
 | Command | Description |
 |---------|-------------|
+| `cubecli org plan` | Organization plan (Free, Pro, Business, Enterprise): status, interval, price in USD, current period, renewal, scheduled change or cancellation, monthly credit and plan invoices. Read only |
 | `cubecli project list\|show\|create\|update\|delete` | Projects |
 | `cubecli ssh-key list\|create\|update\|delete` | SSH keys |
+
+`cubecli auth status` also shows the plan of the active profile's organization
+(`Free`, `Pro, renews 2026-11-01`, `Pro, ends 2026-11-01` when a cancellation is
+scheduled). In `--json` the active profile carries the `plan` block of
+`/account/me` (`null` on Free). Plans are bought, changed, cancelled and
+resumed from the dashboard Plan page (https://my.cubepath.com/organization/plan),
+not from cubecli.
 
 ### Compute
 

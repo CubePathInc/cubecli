@@ -23,6 +23,7 @@ import (
 	"github.com/CubePathInc/cubecli/cmd/natgateway"
 	"github.com/CubePathInc/cubecli/cmd/network"
 	"github.com/CubePathInc/cubecli/cmd/objectstorage"
+	orgcmd "github.com/CubePathInc/cubecli/cmd/org"
 	"github.com/CubePathInc/cubecli/cmd/profile"
 	"github.com/CubePathInc/cubecli/cmd/project"
 	skillscmd "github.com/CubePathInc/cubecli/cmd/skills"
@@ -100,6 +101,7 @@ func init() {
 		authcmd.NewCmd(),
 		configcmd.NewCmd(),
 		profile.NewCmd(),
+		orgcmd.NewCmd(),
 		sshkey.NewCmd(),
 		project.NewCmd(),
 		network.NewCmd(),
