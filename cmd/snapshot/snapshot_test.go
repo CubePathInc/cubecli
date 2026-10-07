@@ -11,7 +11,7 @@ import (
 
 const snapshotJSON = `{
   "uuid": "6f1c-aaaa", "name": "web-01-2026-10-07", "description": null,
-  "status": "available", "os_type": "linux",
+  "status": "available", "origin": "vps", "os_type": "linux",
   "disk_gb": 80, "estimated_gb": 80, "billable_gb": 80,
   "location": {"name": "eu-bcn-1", "description": "Barcelona"},
   "store_location": {"name": "eu-bcn-1", "description": "Barcelona"},
@@ -25,7 +25,7 @@ const snapshotJSON = `{
 
 const pendingJSON = `{
   "uuid": "77aa-bbbb", "name": "db", "description": "before upgrade",
-  "status": "pending", "os_type": null,
+  "status": "pending", "origin": "backup", "os_type": null,
   "disk_gb": null, "estimated_gb": 40, "billable_gb": null,
   "location": {"name": "us-mia-1", "description": null},
   "store_location": {"name": "eu-bcn-1", "description": "Barcelona"},
@@ -58,6 +58,9 @@ func TestParseList(t *testing.T) {
 	}
 	if p.sizeGB() != "~40 GB" || p.sourceVPS() != "old-db (deleted)" || p.osName() != "Debian 12" || locationName(p.Location) != "us-mia-1" {
 		t.Fatalf("pending snapshot rendered wrong: %q %q %q", p.sizeGB(), p.sourceVPS(), p.osName())
+	}
+	if a.origin() != "server" || p.origin() != "backup" || (Snapshot{}).origin() != "-" {
+		t.Fatalf("origin rendered wrong: %q %q", a.origin(), p.origin())
 	}
 	if *p.Description != "before upgrade" || p.Location.Description != nil {
 		t.Fatalf("descriptions parsed wrong: %+v", p)
@@ -147,6 +150,9 @@ func TestGetAndQuota(t *testing.T) {
 	if !strings.Contains(out, "glowbit") || !strings.Contains(out, "$2.40/month") {
 		t.Fatalf("get output:\n%s", out)
 	}
+	if !hasLine(out, "Origin", "server") {
+		t.Fatalf("get output misses the origin:\n%s", out)
+	}
 
 	out, reqs, err = cmdtest.Run(t, NewCmd(), respond, "quota")
 	if err != nil {
@@ -161,6 +167,20 @@ func TestGetAndQuota(t *testing.T) {
 	if strings.Contains(out, "enabled") || strings.Contains(out, "disabled") {
 		t.Fatalf("quota must not show an on/off state:\n%s", out)
 	}
+}
+
+// hasLine reports whether one line of out contains every part.
+func hasLine(out string, parts ...string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		ok := true
+		for _, p := range parts {
+			ok = ok && strings.Contains(line, p)
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGetJSONPassesThrough(t *testing.T) {
@@ -196,6 +216,11 @@ func TestCreateBody(t *testing.T) {
 	}
 	if _, _, err := cmdtest.Run(t, NewCmd(), respond, "create", "--vps", "1", "--backup", "0", "--name", "x"); err == nil {
 		t.Fatal("want error for --backup 0")
+	}
+	for _, v := range []string{"0", "-3"} {
+		if _, reqs, err := cmdtest.Run(t, NewCmd(), respond, "create", "--vps", v, "--name", "x"); err == nil || len(reqs) != 0 {
+			t.Fatalf("--vps %s: want a local error and no request", v)
+		}
 	}
 	if _, _, err := cmdtest.Run(t, NewCmd(), respond, "create", "--backup", "2", "--name", "x"); err == nil {
 		t.Fatal("want error without --vps")

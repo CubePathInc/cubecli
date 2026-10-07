@@ -30,6 +30,7 @@ type Snapshot struct {
 	Name          string   `json:"name"`
 	Description   *string  `json:"description"`
 	Status        string   `json:"status"`
+	Origin        string   `json:"origin"`
 	OSType        *string  `json:"os_type"`
 	DiskGB        *int     `json:"disk_gb"`
 	EstimatedGB   int      `json:"estimated_gb"`
@@ -122,6 +123,19 @@ func (s Snapshot) sourceVPS() string {
 		name += " (deleted)"
 	}
 	return name
+}
+
+// origin names where the snapshot came from; older APIs do not send it.
+func (s Snapshot) origin() string {
+	switch s.Origin {
+	case "vps":
+		return "server"
+	case "backup":
+		return "backup"
+	case "":
+		return "-"
+	}
+	return s.Origin
 }
 
 func (s Snapshot) osName() string {
@@ -319,6 +333,7 @@ func getCmd() *cobra.Command {
 			if sn.ProjectID != nil {
 				info.AddRow("Project", strconv.Itoa(*sn.ProjectID))
 			}
+			info.AddRow("Origin", sn.origin())
 			info.AddRow("Source VPS", sn.sourceVPS())
 			info.AddRow("Price", fmt.Sprintf("$%s per GB per month", strconv.FormatFloat(sn.PriceGBMonth, 'f', -1, 64)))
 			info.AddRow("Cost", fmt.Sprintf("%s/month (%s/hour)", money(sn.MonthlyCost), strconv.FormatFloat(sn.HourlyCost, 'f', 6, 64)))
@@ -382,9 +397,12 @@ func createCmd() *cobra.Command {
 		Short: "Take a snapshot of a VPS now, or convert one of its backups",
 		Long: `Take a snapshot of a VPS now, or convert one of its completed backups.
 
-Without --backup the snapshot copies the current disk of the VPS: backups do
-not need to be enabled. With --backup it converts that completed backup
-instead (find the ID with "cubecli vps backup list <vps_id>").
+Without --backup the snapshot is taken now, with the server running: it copies
+the current disk of the VPS and backups do not need to be enabled. Pause the
+writes of a database first if you need it consistent.
+
+With --backup it converts that completed backup instead (find the ID with
+"cubecli vps backup list <vps_id>").
 
 The snapshot is billed per GB of the VPS disk per month until you delete it.
 It is queued and takes a few minutes: follow it with
@@ -396,6 +414,9 @@ It is queued and takes a few minutes: follow it with
 			vpsID, _ := cmd.Flags().GetInt("vps")
 			backupID, _ := cmd.Flags().GetInt("backup")
 			name, _ := cmd.Flags().GetString("name")
+			if vpsID <= 0 {
+				return fmt.Errorf("--vps must be a VPS ID")
+			}
 			if strings.TrimSpace(name) == "" {
 				return fmt.Errorf("--name can not be empty")
 			}
@@ -540,7 +561,7 @@ func deleteCmd() *cobra.Command {
 		Long: `Delete a snapshot permanently and stop its billing.
 
 Servers already deployed from the snapshot are not affected. A snapshot can not
-be deleted while it is being converted or while a deployment is using it.`,
+be deleted while it is being created or while a deployment is using it.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmdutil.CheckForce(cmd, fmt.Sprintf("Are you sure you want to delete snapshot %s? This can not be undone.", args[0])) {
