@@ -294,6 +294,8 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 					Network struct {
 						Name string `json:"name"`
 					} `json:"network"`
+					SourceSnapshotUUID *string `json:"source_snapshot_uuid"`
+					DeployHealth       *string `json:"deploy_health"`
 				} `json:"vps"`
 			}
 			if err := json.Unmarshal(resp, &projects); err != nil {
@@ -326,6 +328,12 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 					t1.AddRow("Username", v.Username)
 					t1.AddRow("SSH Keys", strings.Join(sshKeyNames, ", "))
 					t1.AddRow("Label", v.Label)
+					if v.SourceSnapshotUUID != nil && *v.SourceSnapshotUUID != "" {
+						t1.AddRow("From snapshot", *v.SourceSnapshotUUID)
+					}
+					if v.DeployHealth != nil && *v.DeployHealth != "" {
+						t1.AddRow("Deploy health", output.FormatStatus(*v.DeployHealth))
+					}
 					t1.Render()
 
 					t2 := output.NewTable("Resources & Network", []string{"Field", "Value"})
