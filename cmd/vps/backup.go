@@ -49,14 +49,20 @@ func addBackupCmd(parent *cobra.Command) {
 					Size     float64 `json:"size_gb"`
 					Notes    string `json:"notes"`
 					Created  string `json:"created_at"`
+					// Live snapshot converted from this backup, if any.
+					SnapshotUUID *string `json:"snapshot_uuid"`
 				} `json:"backups"`
 			}
 			if err := json.Unmarshal(resp, &result); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("Backups", []string{"ID", "Type", "Status", "Progress", "Size", "Notes", "Created"})
+			t := output.NewTable("Backups", []string{"ID", "Type", "Status", "Progress", "Size", "Notes", "Snapshot", "Created"})
 			for _, b := range result.Backups {
+				snapshot := "-"
+				if b.SnapshotUUID != nil && *b.SnapshotUUID != "" {
+					snapshot = *b.SnapshotUUID
+				}
 				t.AddRow(
 					strconv.Itoa(b.ID),
 					b.Type,
@@ -64,6 +70,7 @@ func addBackupCmd(parent *cobra.Command) {
 					fmt.Sprintf("%d%%", b.Progress),
 					fmt.Sprintf("%.2f GB", b.Size),
 					b.Notes,
+					snapshot,
 					b.Created,
 				)
 			}
