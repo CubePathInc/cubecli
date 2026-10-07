@@ -21,6 +21,14 @@ func NewCmd() *cobra.Command {
 	vpsCreateCmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new VPS instance",
+		Long: `Create a new VPS instance from an OS template (--template) or from a
+snapshot of your organization (--snapshot, see "cubecli snapshot list").
+
+A snapshot can be deployed in any location, on a plan whose disk is at least
+the snapshot disk. Custom cloud-init and apps are not available with a
+snapshot: on Linux only the hostname, user, password and SSH keys are applied
+and the machine-id is regenerated; Windows keeps the SID and licence of the
+source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
@@ -47,7 +55,11 @@ func NewCmd() *cobra.Command {
 			backups, _ := cmd.Flags().GetBool("backups")
 			cloudinit, _ := cmd.Flags().GetString("cloudinit")
 			availabilityGroup, _ := cmd.Flags().GetString("availability-group")
+			snapshot, _ := cmd.Flags().GetString("snapshot")
 
+			if err := validateImageFlags(template, snapshot, cloudinit); err != nil {
+				return err
+			}
 			if len(sshKeyIDs) == 0 && password == "" {
 				return fmt.Errorf("either --ssh or --password must be provided")
 			}
@@ -63,11 +75,15 @@ func NewCmd() *cobra.Command {
 			body := map[string]interface{}{
 				"name":           name,
 				"plan_name":      plan,
-				"template_name":  template,
 				"location_name":  location,
 				"ipv4":           ipv4,
 				"ipv6":           ipv6,
 				"enable_backups": backups,
+			}
+			if snapshot != "" {
+				body["snapshot_id"] = snapshot
+			} else {
+				body["template_name"] = template
 			}
 			if label != "" {
 				body["label"] = label
@@ -570,7 +586,8 @@ func NewCmd() *cobra.Command {
 	// vps create flags
 	vpsCreateCmd.Flags().StringP("name", "n", "", "VPS name")
 	vpsCreateCmd.Flags().StringP("plan", "p", "", "Plan name")
-	vpsCreateCmd.Flags().StringP("template", "t", "", "Template name")
+	vpsCreateCmd.Flags().StringP("template", "t", "", "Template name (required unless --snapshot)")
+	vpsCreateCmd.Flags().String("snapshot", "", "UUID of a snapshot to deploy instead of a template (see cubecli snapshot list)")
 	vpsCreateCmd.Flags().Int("project", 0, "Project ID")
 	vpsCreateCmd.Flags().StringP("location", "l", "", "Location name")
 	vpsCreateCmd.Flags().IntSliceP("ssh", "s", nil, "SSH key IDs (repeatable)")
@@ -588,7 +605,6 @@ func NewCmd() *cobra.Command {
 	vpsCreateCmd.Flags().String("availability-group", "", "UUID of the availability group to place the VPS in")
 	_ = vpsCreateCmd.MarkFlagRequired("name")
 	_ = vpsCreateCmd.MarkFlagRequired("plan")
-	_ = vpsCreateCmd.MarkFlagRequired("template")
 	_ = vpsCreateCmd.MarkFlagRequired("project")
 	_ = vpsCreateCmd.MarkFlagRequired("location")
 
@@ -643,6 +659,21 @@ func NewCmd() *cobra.Command {
 }
 
 // findVPSInProjects returns the raw JSON of one VPS from a /projects/ response.
+// validateImageFlags checks that exactly one of --template and --snapshot is
+// set, and that --cloudinit is not combined with --snapshot (the API rejects
+// custom cloud-init on snapshot deploys).
+func validateImageFlags(template, snapshot, cloudinit string) error {
+	switch {
+	case template != "" && snapshot != "":
+		return fmt.Errorf("--template and --snapshot are mutually exclusive: choose an OS template or a snapshot")
+	case template == "" && snapshot == "":
+		return fmt.Errorf("either --template or --snapshot is required")
+	case snapshot != "" && cloudinit != "":
+		return fmt.Errorf("--cloudinit can not be used with --snapshot: custom cloud-init is not available when deploying from a snapshot")
+	}
+	return nil
+}
+
 func findVPSInProjects(resp json.RawMessage, vpsID int) (json.RawMessage, error) {
 	var projects []struct {
 		VPS []json.RawMessage `json:"vps"`

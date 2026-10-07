@@ -48,3 +48,37 @@ func TestManageRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateImageFlags(t *testing.T) {
+	base := []string{"create", "--name", "web", "--plan", "gp.small", "--project", "7", "--location", "eu-bcn-1", "--ssh", "3"}
+	bad := [][]string{
+		{"--template", "ubuntu-24", "--snapshot", "6f1c"},
+		{},
+		{"--snapshot", "6f1c", "--cloudinit", "#cloud-config"},
+	}
+	for _, extra := range bad {
+		_, reqs, err := cmdtest.Run(t, NewCmd(), nil, append(append([]string{}, base...), extra...)...)
+		if err == nil || len(reqs) != 0 {
+			t.Fatalf("%v: want a local error and no request, got err=%v reqs=%d", extra, err, len(reqs))
+		}
+	}
+
+	_, reqs, err := cmdtest.Run(t, NewCmd(), nil, append(append([]string{}, base...), "--snapshot", "6f1c")...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := cmdtest.Last(reqs)
+	b := r.Obj()
+	if _, ok := b["template_name"]; ok || b["snapshot_id"] != "6f1c" || r.Path != "/vps/create/7" {
+		t.Fatalf("snapshot deploy: got %s %s", r.Path, r.Raw)
+	}
+
+	_, reqs, err = cmdtest.Run(t, NewCmd(), nil, append(append([]string{}, base...), "--template", "ubuntu-24")...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = cmdtest.Last(reqs).Obj()
+	if _, ok := b["snapshot_id"]; ok || b["template_name"] != "ubuntu-24" {
+		t.Fatalf("template deploy: got %s", cmdtest.Last(reqs).Raw)
+	}
+}
