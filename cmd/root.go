@@ -27,6 +27,7 @@ import (
 	"github.com/CubePathInc/cubecli/cmd/profile"
 	"github.com/CubePathInc/cubecli/cmd/project"
 	skillscmd "github.com/CubePathInc/cubecli/cmd/skills"
+	"github.com/CubePathInc/cubecli/cmd/snapshot"
 	"github.com/CubePathInc/cubecli/cmd/sshkey"
 	"github.com/CubePathInc/cubecli/cmd/transcoder"
 	"github.com/CubePathInc/cubecli/cmd/vps"
@@ -108,6 +109,7 @@ func init() {
 		natgateway.NewCmd(),
 		location.NewCmd(),
 		vps.NewCmd(),
+		snapshot.NewCmd(),
 		baremetal.NewCmd(),
 		availabilitygroup.NewCmd(),
 		floatingip.NewCmd(),

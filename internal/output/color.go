@@ -32,9 +32,9 @@ func PrintInfo(msg string) {
 
 func FormatStatus(status string) string {
 	switch status {
-	case "active", "running", "healthy", "enabled", "verified":
+	case "active", "running", "healthy", "enabled", "verified", "available":
 		return green.Sprint(status)
-	case "stopped", "paused", "pending", "provisioning", "inactive":
+	case "stopped", "paused", "pending", "provisioning", "inactive", "converting", "deleting":
 		return dim.Sprint(status)
 	case "degraded":
 		return yellow.Sprint(status)
