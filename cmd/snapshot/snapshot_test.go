@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -233,4 +234,47 @@ func TestDeleteWithForce(t *testing.T) {
 	if r := cmdtest.Last(reqs); r.Method != http.MethodDelete || r.Path != "/snapshots/u1" {
 		t.Fatalf("got %s %s", r.Method, r.Path)
 	}
+}
+
+// withStdin feeds input to the confirmation prompt for the duration of fn.
+func withStdin(t *testing.T, input string, fn func()) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.WriteString(input); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	old := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = old; _ = r.Close() }()
+	fn()
+}
+
+func TestDeleteAsksForConfirmation(t *testing.T) {
+	for _, input := range []string{"", "n\n", "no\n"} {
+		withStdin(t, input, func() {
+			out, reqs, err := cmdtest.Run(t, NewCmd(), nil, "delete", "u1")
+			if err != nil {
+				t.Fatalf("%q: %v", input, err)
+			}
+			if !strings.Contains(out, "delete snapshot u1") || !strings.Contains(out, "Aborted") {
+				t.Fatalf("%q: output %q", input, out)
+			}
+			if len(reqs) != 0 {
+				t.Fatalf("%q: sent %d requests, want none", input, len(reqs))
+			}
+		})
+	}
+	withStdin(t, "y\n", func() {
+		_, reqs, err := cmdtest.Run(t, NewCmd(), nil, "delete", "u1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r := cmdtest.Last(reqs); r.Method != http.MethodDelete || r.Path != "/snapshots/u1" {
+			t.Fatalf("got %s %s", r.Method, r.Path)
+		}
+	})
 }
