@@ -80,11 +80,11 @@ func TestParseGetWithEstimates(t *testing.T) {
 }
 
 func TestParseQuota(t *testing.T) {
-	q, err := parseQuota([]byte(`{"enabled": true, "count": 2, "count_max": 10, "gb": 120, "gb_max": 500, "price_gb_month": 0.03}`))
+	q, err := parseQuota([]byte(`{"count": 2, "count_max": 10, "gb": 120, "gb_max": 500, "price_gb_month": 0.03}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q != (Quota{Enabled: true, Count: 2, CountMax: 10, GB: 120, GBMax: 500, PriceGBMonth: 0.03}) {
+	if q != (Quota{Count: 2, CountMax: 10, GB: 120, GBMax: 500, PriceGBMonth: 0.03}) {
 		t.Fatalf("got %+v", q)
 	}
 	if _, err := parseQuota([]byte(`not json`)); err == nil {
@@ -95,7 +95,7 @@ func TestParseQuota(t *testing.T) {
 func respond(method, path string) (int, string) {
 	switch {
 	case method == http.MethodGet && path == "/snapshots/quota":
-		return 200, `{"enabled": true, "count": 1, "count_max": 10, "gb": 80, "gb_max": 500, "price_gb_month": 0.03}`
+		return 200, `{"count": 1, "count_max": 10, "gb": 80, "gb_max": 500, "price_gb_month": 0.03}`
 	case method == http.MethodGet && strings.HasPrefix(path, "/snapshots?"):
 		return 200, `{"snapshots": [` + snapshotJSON + `,` + pendingJSON + `], "total": 2}`
 	case method == http.MethodGet && strings.HasPrefix(path, "/snapshots/"):
@@ -157,6 +157,9 @@ func TestGetAndQuota(t *testing.T) {
 	}
 	if !strings.Contains(out, "1 / 10") || !strings.Contains(out, "80 / 500 GB") {
 		t.Fatalf("quota output:\n%s", out)
+	}
+	if strings.Contains(out, "enabled") || strings.Contains(out, "disabled") {
+		t.Fatalf("quota must not show an on/off state:\n%s", out)
 	}
 }
 

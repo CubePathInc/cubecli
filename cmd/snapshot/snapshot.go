@@ -70,7 +70,6 @@ type ListResponse struct {
 
 // Quota is the body of GET /snapshots/quota.
 type Quota struct {
-	Enabled      bool    `json:"enabled"`
 	Count        int     `json:"count"`
 	CountMax     int     `json:"count_max"`
 	GB           int     `json:"gb"`
@@ -363,12 +362,7 @@ func quotaCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			enabled := "disabled"
-			if q.Enabled {
-				enabled = "enabled"
-			}
 			t := output.NewTable("Snapshot Quota", []string{"Field", "Value"})
-			t.AddRow("Snapshots", output.FormatStatus(enabled))
 			t.AddRow("Count", fmt.Sprintf("%d / %d", q.Count, q.CountMax))
 			t.AddRow("Storage", fmt.Sprintf("%d / %d GB", q.GB, q.GBMax))
 			t.AddRow("Price", fmt.Sprintf("$%s per GB per month", strconv.FormatFloat(q.PriceGBMonth, 'f', -1, 64)))
