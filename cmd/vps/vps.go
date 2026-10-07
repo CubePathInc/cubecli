@@ -658,7 +658,6 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 	return vpsCmd
 }
 
-// findVPSInProjects returns the raw JSON of one VPS from a /projects/ response.
 // validateImageFlags checks that exactly one of --template and --snapshot is
 // set, and that --cloudinit is not combined with --snapshot (the API rejects
 // custom cloud-init on snapshot deploys).
@@ -674,6 +673,7 @@ func validateImageFlags(template, snapshot, cloudinit string) error {
 	return nil
 }
 
+// findVPSInProjects returns the raw JSON of one VPS from a /projects/ response.
 func findVPSInProjects(resp json.RawMessage, vpsID int) (json.RawMessage, error) {
 	var projects []struct {
 		VPS []json.RawMessage `json:"vps"`
