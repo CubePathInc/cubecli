@@ -204,7 +204,7 @@ not from cubecli.
 | `cubecli vps backup list\|create\|restore\|delete <id>` | Backup management |
 | `cubecli vps backup settings\|configure <id>` | Auto-backup settings |
 | `cubecli snapshot list\|get\|quota` | VPS snapshots of the organization, limits and price |
-| `cubecli snapshot create --vps <id> --backup <id> --name <name>` | Convert a completed backup into a snapshot |
+| `cubecli snapshot create --vps <id> --name <name> [--backup <id>]` | Take a snapshot of a VPS now, or convert one of its completed backups |
 | `cubecli snapshot update\|rename\|move-project <uuid>` | Rename, describe or move a snapshot |
 | `cubecli snapshot delete <uuid>` | Delete a snapshot and stop its billing |
 | `cubecli vps iso list\|mount\|unmount <id>` | ISO management |
@@ -217,12 +217,13 @@ not from cubecli.
 | `cubecli vps console <id>` | VNC console session |
 | `cubecli availability-group list\|show\|create\|delete\|add-vps\|remove-vps\|move-project` | Availability groups |
 
-VPS snapshots are permanent copies of a VPS disk made from a completed backup. They do not expire with the backup retention, survive the source VPS and are billed per GB of disk per month until deleted. Deploy one in any location on a plan with at least the same disk:
+VPS snapshots are permanent copies of a VPS disk, taken directly from the server (backups do not need to be enabled) or converted from a completed backup. They do not expire with the backup retention, survive the source VPS and are billed per GB of disk per month until deleted. Deploy one in any location on a plan with at least the same disk:
 
 ```bash
-cubecli vps backup list 20467                                  # find a completed backup
-cubecli snapshot create --vps 20467 --backup 991 --name web-01-golden
-cubecli snapshot get <uuid>                                    # wait for status available
+cubecli snapshot create --vps 20467 --name web-01-golden             # snapshot the VPS now
+cubecli vps backup list 20467                                        # or pick a completed backup
+cubecli snapshot create --vps 20467 --backup 991 --name web-01-old   # and convert it
+cubecli snapshot get <uuid>                                          # wait for status available
 cubecli vps create --snapshot <uuid> --name web-02 --plan gp.small \
   --location us-mia-1 --project 655 --ssh 3
 ```

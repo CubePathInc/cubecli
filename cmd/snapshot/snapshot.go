@@ -1,5 +1,6 @@
 // Package snapshot implements `cubecli snapshot`: VPS snapshots, permanent
-// copies of a VPS disk converted from a completed backup.
+// copies of a VPS disk taken from the server itself or converted from a
+// completed backup.
 package snapshot
 
 import (
@@ -165,7 +166,8 @@ func NewCmd() *cobra.Command {
 		Short:   "Manage VPS snapshots",
 		Long: `Manage VPS snapshots.
 
-A snapshot is a permanent copy of a VPS disk, converted from a completed backup.
+A snapshot is a permanent copy of a VPS disk, taken directly from the server
+(backups do not need to be enabled) or converted from a completed backup.
 It belongs to the organization: it does not expire with the backup retention and
 survives the deletion of the source VPS. It is billed per GB of disk per month
 until deleted (see "cubecli snapshot quota" for the price and your limits).
@@ -377,14 +379,18 @@ func quotaCmd() *cobra.Command {
 func createCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Convert a completed backup of a VPS into a snapshot",
-		Long: `Convert a completed backup of a VPS into a snapshot.
+		Short: "Take a snapshot of a VPS now, or convert one of its backups",
+		Long: `Take a snapshot of a VPS now, or convert one of its completed backups.
+
+Without --backup the snapshot copies the current disk of the VPS: backups do
+not need to be enabled. With --backup it converts that completed backup
+instead (find the ID with "cubecli vps backup list <vps_id>").
 
 The snapshot is billed per GB of the VPS disk per month until you delete it.
-The conversion is queued and takes a few minutes: follow it with
-"cubecli snapshot get <uuid>" until its status is available.
-
-Find the backup ID with "cubecli vps backup list <vps_id>".`,
+It is queued and takes a few minutes: follow it with
+"cubecli snapshot get <uuid>" until its status is available.`,
+		Example: `  cubecli snapshot create --vps 20467 --name web-01-golden
+  cubecli snapshot create --vps 20467 --backup 991 --name web-01-before-upgrade`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			vpsID, _ := cmd.Flags().GetInt("vps")
@@ -394,9 +400,14 @@ Find the backup ID with "cubecli vps backup list <vps_id>".`,
 				return fmt.Errorf("--name can not be empty")
 			}
 			body := map[string]interface{}{
-				"vps_id":    vpsID,
-				"backup_id": backupID,
-				"name":      name,
+				"vps_id": vpsID,
+				"name":   name,
+			}
+			if cmd.Flags().Changed("backup") {
+				if backupID <= 0 {
+					return fmt.Errorf("--backup must be a backup ID (omit it to snapshot the VPS now)")
+				}
+				body["backup_id"] = backupID
 			}
 			if cmd.Flags().Changed("description") {
 				d, _ := cmd.Flags().GetString("description")
@@ -435,11 +446,10 @@ Find the backup ID with "cubecli vps backup list <vps_id>".`,
 		},
 	}
 	cmd.Flags().Int("vps", 0, "Source VPS ID")
-	cmd.Flags().Int("backup", 0, "Backup ID of that VPS (must be completed)")
+	cmd.Flags().Int("backup", 0, "Convert this completed backup of the VPS instead of taking the snapshot now")
 	cmd.Flags().StringP("name", "n", "", "Snapshot name (up to 100 characters)")
 	cmd.Flags().StringP("description", "d", "", "Snapshot description (up to 500 characters)")
 	_ = cmd.MarkFlagRequired("vps")
-	_ = cmd.MarkFlagRequired("backup")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }

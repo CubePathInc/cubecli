@@ -194,11 +194,32 @@ func TestCreateBody(t *testing.T) {
 	if _, ok := cmdtest.Last(reqs).Obj()["description"]; ok {
 		t.Fatal("description sent without --description")
 	}
-	if _, _, err := cmdtest.Run(t, NewCmd(), respond, "create", "--vps", "1", "--name", "x"); err == nil {
-		t.Fatal("want error without --backup")
+	if _, _, err := cmdtest.Run(t, NewCmd(), respond, "create", "--vps", "1", "--backup", "0", "--name", "x"); err == nil {
+		t.Fatal("want error for --backup 0")
+	}
+	if _, _, err := cmdtest.Run(t, NewCmd(), respond, "create", "--backup", "2", "--name", "x"); err == nil {
+		t.Fatal("want error without --vps")
 	}
 	if _, _, err := cmdtest.Run(t, NewCmd(), respond, "create", "--vps", "1", "--backup", "2", "--name", "  "); err == nil {
 		t.Fatal("want error for a blank name")
+	}
+}
+
+func TestCreateFromVPSNow(t *testing.T) {
+	out, reqs, err := cmdtest.Run(t, NewCmd(), respond, "create", "--vps", "20467", "--name", "web-01-now")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := cmdtest.Last(reqs)
+	b := r.Obj()
+	if r.Method != http.MethodPost || r.Path != "/snapshots" || b["vps_id"] != 20467.0 || b["name"] != "web-01-now" {
+		t.Fatalf("got %s %s %s", r.Method, r.Path, r.Raw)
+	}
+	if _, ok := b["backup_id"]; ok {
+		t.Fatalf("backup_id sent without --backup: %s", r.Raw)
+	}
+	if !strings.Contains(out, "77aa-bbbb") {
+		t.Fatalf("create output misses the uuid:\n%s", out)
 	}
 }
 
