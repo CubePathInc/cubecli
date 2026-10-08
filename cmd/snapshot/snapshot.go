@@ -116,9 +116,16 @@ func (s Snapshot) diskGB() string {
 	return fmt.Sprintf("~%d GB", s.EstimatedGB)
 }
 
+// measured reports whether billable_gb is the stored size: only once the snapshot
+// is available (or being deleted). While it converts the API may already return
+// the disk size there, which is not what ends up stored.
+func (s Snapshot) measured() bool {
+	return s.BillableGB != nil && (s.Status == "available" || s.Status == "deleting")
+}
+
 // storedGB is the stored size that is billed, "-" until it is known.
 func (s Snapshot) storedGB() string {
-	if s.BillableGB == nil {
+	if !s.measured() {
 		return "-"
 	}
 	return strconv.FormatFloat(*s.BillableGB, 'f', -1, 64) + " GB"
@@ -135,10 +142,19 @@ func (s Snapshot) maxMonthly() float64 {
 
 // monthly is the monthly cost, or its upper bound while the stored size is unknown.
 func (s Snapshot) monthly() string {
-	if s.BillableGB == nil {
+	if !s.measured() {
 		return "up to " + money(s.maxMonthly())
 	}
 	return money(s.MonthlyCost)
+}
+
+// cost is the Cost row of get: the hourly rate only once the stored size is known,
+// so an upper bound is never shown next to what looks like an exact rate.
+func (s Snapshot) cost() string {
+	if !s.measured() {
+		return s.monthly() + "/month"
+	}
+	return fmt.Sprintf("%s/month (%s/hour)", s.monthly(), strconv.FormatFloat(s.HourlyCost, 'f', 6, 64))
 }
 
 func (s Snapshot) sourceVPS() string {
@@ -369,7 +385,7 @@ func getCmd() *cobra.Command {
 			info.AddRow("Origin", sn.origin())
 			info.AddRow("Source VPS", sn.sourceVPS())
 			info.AddRow("Price", fmt.Sprintf("$%s per GB stored per month", strconv.FormatFloat(sn.PriceGBMonth, 'f', -1, 64)))
-			info.AddRow("Cost", fmt.Sprintf("%s/month (%s/hour)", sn.monthly(), strconv.FormatFloat(sn.HourlyCost, 'f', 6, 64)))
+			info.AddRow("Cost", sn.cost())
 			info.AddRow("Deploying now", strconv.Itoa(sn.DeployingCount))
 			info.AddRow("Created", sn.CreatedAt)
 			info.AddRow("Available since", strOr(sn.AvailableAt, "-"))

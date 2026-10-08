@@ -69,21 +69,23 @@ func TestParseList(t *testing.T) {
 
 func TestStoredSizeAndCost(t *testing.T) {
 	for _, c := range []struct {
-		body, stored, monthly string
+		body, stored, monthly, cost string
 	}{
-		{`{"billable_gb": 1.37, "monthly_cost": 0.0411, "max_monthly_cost": 2.4}`, "1.37 GB", "$0.04"},
-		{`{"billable_gb": 80, "monthly_cost": 2.4, "max_monthly_cost": 2.4}`, "80 GB", "$2.40"},
-		{`{"billable_gb": 1, "monthly_cost": 0.03, "max_monthly_cost": 0.6}`, "1 GB", "$0.03"},
-		{`{"billable_gb": null, "monthly_cost": 2.4, "max_monthly_cost": 2.4}`, "-", "up to $2.40"},
+		{`{"status": "available", "billable_gb": 1.37, "monthly_cost": 0.0411, "hourly_cost": 0.000056, "max_monthly_cost": 2.4}`, "1.37 GB", "$0.04", "$0.04/month (0.000056/hour)"},
+		{`{"status": "available", "billable_gb": 80, "monthly_cost": 2.4, "max_monthly_cost": 2.4}`, "80 GB", "$2.40", "$2.40/month (0.000000/hour)"},
+		{`{"status": "deleting", "billable_gb": 1, "monthly_cost": 0.03, "max_monthly_cost": 0.6}`, "1 GB", "$0.03", "$0.03/month (0.000000/hour)"},
+		{`{"status": "available", "billable_gb": null, "monthly_cost": 2.4, "max_monthly_cost": 2.4}`, "-", "up to $2.40", "up to $2.40/month"},
+		// Converting with disk_gb known: billable_gb is the disk, not what is stored.
+		{`{"status": "converting", "disk_gb": 80, "billable_gb": 80, "monthly_cost": 2.4, "hourly_cost": 0.003288, "max_monthly_cost": 2.4}`, "-", "up to $2.40", "up to $2.40/month"},
 		// An API without max_monthly_cost: the cost of a snapshot not stored yet is already the disk.
-		{`{"billable_gb": null, "monthly_cost": 1.2}`, "-", "up to $1.20"},
+		{`{"status": "pending", "billable_gb": null, "monthly_cost": 1.2}`, "-", "up to $1.20", "up to $1.20/month"},
 	} {
 		s, err := parseSnapshot([]byte(c.body))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if s.storedGB() != c.stored || s.monthly() != c.monthly {
-			t.Fatalf("%s: got stored=%q monthly=%q", c.body, s.storedGB(), s.monthly())
+		if s.storedGB() != c.stored || s.monthly() != c.monthly || s.cost() != c.cost {
+			t.Fatalf("%s: got stored=%q monthly=%q cost=%q", c.body, s.storedGB(), s.monthly(), s.cost())
 		}
 	}
 }
