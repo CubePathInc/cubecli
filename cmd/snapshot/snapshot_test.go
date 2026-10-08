@@ -12,13 +12,13 @@ import (
 const snapshotJSON = `{
   "uuid": "6f1c-aaaa", "name": "web-01-2026-10-07", "description": null,
   "status": "available", "origin": "vps", "os_type": "linux",
-  "disk_gb": 80, "estimated_gb": 80, "billable_gb": 80,
+  "disk_gb": 80, "estimated_gb": 80, "billable_gb": 6.84,
   "location": {"name": "eu-bcn-1", "description": "Barcelona"},
   "store_location": {"name": "eu-bcn-1", "description": "Barcelona"},
   "project_id": 655,
   "source_vps": {"id": 20467, "name": "glowbit", "deleted": false},
   "template": {"template_name": "ubuntu-24", "name": "Ubuntu 24", "operating_system": "ubuntu"},
-  "price_gb_month": 0.03, "monthly_cost": 2.4, "hourly_cost": 0.003288,
+  "price_gb_month": 0.03, "monthly_cost": 0.2052, "hourly_cost": 0.000281, "max_monthly_cost": 2.4,
   "deploying_count": 1,
   "created_at": "2026-10-07T10:00:00Z", "available_at": "2026-10-07T10:03:12Z"
 }`
@@ -32,7 +32,7 @@ const pendingJSON = `{
   "project_id": 7,
   "source_vps": {"id": null, "name": "old-db", "deleted": true},
   "template": {"template_name": "debian-12", "name": "Debian 12", "operating_system": "debian"},
-  "price_gb_month": 0.03, "monthly_cost": 1.2, "hourly_cost": 0.001644,
+  "price_gb_month": 0.03, "monthly_cost": 1.2, "hourly_cost": 0.001644, "max_monthly_cost": 1.2,
   "deploying_count": 0,
   "created_at": "2026-10-07T11:00:00Z", "available_at": null
 }`
@@ -46,24 +46,45 @@ func TestParseList(t *testing.T) {
 		t.Fatalf("got total=%d len=%d", r.Total, len(r.Snapshots))
 	}
 	a, p := r.Snapshots[0], r.Snapshots[1]
-	if a.UUID != "6f1c-aaaa" || *a.DiskGB != 80 || *a.BillableGB != 80 || a.MonthlyCost != 2.4 || a.DeployingCount != 1 {
+	if a.UUID != "6f1c-aaaa" || *a.DiskGB != 80 || *a.BillableGB != 6.84 || a.MonthlyCost != 0.2052 || a.MaxMonthlyCost != 2.4 || a.DeployingCount != 1 {
 		t.Fatalf("available snapshot parsed wrong: %+v", a)
 	}
-	if a.sizeGB() != "80 GB" || a.sourceVPS() != "glowbit (20467)" || a.osName() != "Ubuntu 24 (linux)" || *a.AvailableAt == "" {
-		t.Fatalf("available snapshot rendered wrong: %q %q %q", a.sizeGB(), a.sourceVPS(), a.osName())
+	if a.diskGB() != "80 GB" || a.storedGB() != "6.84 GB" || a.monthly() != "$0.21" || a.sourceVPS() != "glowbit (20467)" || a.osName() != "Ubuntu 24 (linux)" || *a.AvailableAt == "" {
+		t.Fatalf("available snapshot rendered wrong: %q %q %q %q %q", a.diskGB(), a.storedGB(), a.monthly(), a.sourceVPS(), a.osName())
 	}
 	// Nulls before the conversion finishes and a deleted source VPS.
 	if p.DiskGB != nil || p.BillableGB != nil || p.OSType != nil || p.AvailableAt != nil || p.SourceVPS.ID != nil {
 		t.Fatalf("pending snapshot nulls parsed wrong: %+v", p)
 	}
-	if p.sizeGB() != "~40 GB" || p.sourceVPS() != "old-db (deleted)" || p.osName() != "Debian 12" || locationName(p.Location) != "us-mia-1" {
-		t.Fatalf("pending snapshot rendered wrong: %q %q %q", p.sizeGB(), p.sourceVPS(), p.osName())
+	if p.diskGB() != "~40 GB" || p.storedGB() != "-" || p.monthly() != "up to $1.20" || p.sourceVPS() != "old-db (deleted)" || p.osName() != "Debian 12" || locationName(p.Location) != "us-mia-1" {
+		t.Fatalf("pending snapshot rendered wrong: %q %q %q %q %q", p.diskGB(), p.storedGB(), p.monthly(), p.sourceVPS(), p.osName())
 	}
 	if a.origin() != "server" || p.origin() != "backup" || (Snapshot{}).origin() != "-" {
 		t.Fatalf("origin rendered wrong: %q %q", a.origin(), p.origin())
 	}
 	if *p.Description != "before upgrade" || p.Location.Description != nil {
 		t.Fatalf("descriptions parsed wrong: %+v", p)
+	}
+}
+
+func TestStoredSizeAndCost(t *testing.T) {
+	for _, c := range []struct {
+		body, stored, monthly string
+	}{
+		{`{"billable_gb": 1.37, "monthly_cost": 0.0411, "max_monthly_cost": 2.4}`, "1.37 GB", "$0.04"},
+		{`{"billable_gb": 80, "monthly_cost": 2.4, "max_monthly_cost": 2.4}`, "80 GB", "$2.40"},
+		{`{"billable_gb": 1, "monthly_cost": 0.03, "max_monthly_cost": 0.6}`, "1 GB", "$0.03"},
+		{`{"billable_gb": null, "monthly_cost": 2.4, "max_monthly_cost": 2.4}`, "-", "up to $2.40"},
+		// An API without max_monthly_cost: the cost of a snapshot not stored yet is already the disk.
+		{`{"billable_gb": null, "monthly_cost": 1.2}`, "-", "up to $1.20"},
+	} {
+		s, err := parseSnapshot([]byte(c.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.storedGB() != c.stored || s.monthly() != c.monthly {
+			t.Fatalf("%s: got stored=%q monthly=%q", c.body, s.storedGB(), s.monthly())
+		}
 	}
 }
 
@@ -77,7 +98,7 @@ func TestParseGetWithEstimates(t *testing.T) {
 	if len(s.DeployEstimates) != 2 || s.DeployEstimates[1] != (DeployEstimate{"us-mia-1", true, 80}) || s.DeployEstimates[0].Remote {
 		t.Fatalf("estimates parsed wrong: %+v", s.DeployEstimates)
 	}
-	if s.HourlyCost != 0.003288 || s.PriceGBMonth != 0.03 || *s.ProjectID != 655 || s.StoreLocation.Name != "eu-bcn-1" {
+	if s.HourlyCost != 0.000281 || s.PriceGBMonth != 0.03 || *s.ProjectID != 655 || s.StoreLocation.Name != "eu-bcn-1" {
 		t.Fatalf("snapshot parsed wrong: %+v", s)
 	}
 }
@@ -118,10 +139,13 @@ func TestListQueryAndTable(t *testing.T) {
 	if r.Method != http.MethodGet || r.Path != "/snapshots?limit=50&project_id=655&source_vps_id=20467&status=available" {
 		t.Fatalf("got %s %s", r.Method, r.Path)
 	}
-	for _, want := range []string{"web-01-2026-10-07", "glowbit (20467)", "old-db (deleted)", "~40 GB", "$2.40", "eu-bcn-1"} {
+	for _, want := range []string{"web-01-2026-10-07", "glowbit (20467)", "old-db (deleted)", "~40 GB", "eu-bcn-1", "Disk", "Stored"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("table misses %q:\n%s", want, out)
 		}
+	}
+	if !hasLine(out, "web-01-2026-10-07", "80 GB", "6.84 GB", "$0.21") || !hasLine(out, "old-db", "~40 GB", "up to $1.20") {
+		t.Fatalf("table rows render disk, stored size and cost wrong:\n%s", out)
 	}
 }
 
@@ -147,8 +171,11 @@ func TestGetAndQuota(t *testing.T) {
 	if r := cmdtest.Last(reqs); r.Path != "/snapshots/6f1c-aaaa" {
 		t.Fatalf("got %s", r.Path)
 	}
-	if !strings.Contains(out, "glowbit") || !strings.Contains(out, "$2.40/month") {
+	if !strings.Contains(out, "glowbit") || !strings.Contains(out, "$0.21/month") {
 		t.Fatalf("get output:\n%s", out)
+	}
+	if !hasLine(out, "Disk", "80 GB") || !hasLine(out, "Stored", "6.84 GB") || !hasLine(out, "Price", "$0.03 per GB stored per month") {
+		t.Fatalf("get output misses disk, stored size or price:\n%s", out)
 	}
 	if !hasLine(out, "Origin", "server") {
 		t.Fatalf("get output misses the origin:\n%s", out)
@@ -161,7 +188,7 @@ func TestGetAndQuota(t *testing.T) {
 	if r := cmdtest.Last(reqs); r.Path != "/snapshots/quota" {
 		t.Fatalf("got %s", r.Path)
 	}
-	if !strings.Contains(out, "1 / 10") || !strings.Contains(out, "80 / 500 GB") {
+	if !strings.Contains(out, "1 / 10") || !strings.Contains(out, "80 / 500 GB") || !hasLine(out, "Price", "per GB stored per month") {
 		t.Fatalf("quota output:\n%s", out)
 	}
 	if strings.Contains(out, "enabled") || strings.Contains(out, "disabled") {
@@ -203,8 +230,8 @@ func TestCreateBody(t *testing.T) {
 	if r.Method != http.MethodPost || r.Path != "/snapshots" || b["vps_id"] != 20467.0 || b["backup_id"] != 991.0 || b["name"] != "web-01" || b["description"] != "golden" {
 		t.Fatalf("got %s %s %s", r.Method, r.Path, r.Raw)
 	}
-	if !strings.Contains(out, "77aa-bbbb") {
-		t.Fatalf("create output misses the uuid:\n%s", out)
+	if !strings.Contains(out, "77aa-bbbb") || !strings.Contains(out, "up to $1.20/month") {
+		t.Fatalf("create output misses the uuid or the maximum cost:\n%s", out)
 	}
 
 	_, reqs, err = cmdtest.Run(t, NewCmd(), respond, "create", "--vps", "1", "--backup", "2", "--name", "x")

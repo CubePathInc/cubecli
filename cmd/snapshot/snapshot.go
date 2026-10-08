@@ -25,6 +25,9 @@ type Location struct {
 }
 
 // Snapshot mirrors SnapshotOut of GET /snapshots and GET /snapshots/{uuid}.
+// BillableGB is the space the snapshot takes once stored (compressed, rounded up
+// to 0.01 GB, at least 1 GB and never above the disk), null until it is available;
+// MaxMonthlyCost is the monthly cost if the copy took the whole disk.
 type Snapshot struct {
 	UUID          string   `json:"uuid"`
 	Name          string   `json:"name"`
@@ -34,7 +37,7 @@ type Snapshot struct {
 	OSType        *string  `json:"os_type"`
 	DiskGB        *int     `json:"disk_gb"`
 	EstimatedGB   int      `json:"estimated_gb"`
-	BillableGB    *int     `json:"billable_gb"`
+	BillableGB    *float64 `json:"billable_gb"`
 	Location      Location `json:"location"`
 	StoreLocation Location `json:"store_location"`
 	ProjectID     *int     `json:"project_id"`
@@ -51,6 +54,7 @@ type Snapshot struct {
 	PriceGBMonth    float64          `json:"price_gb_month"`
 	MonthlyCost     float64          `json:"monthly_cost"`
 	HourlyCost      float64          `json:"hourly_cost"`
+	MaxMonthlyCost  float64          `json:"max_monthly_cost"`
 	DeployingCount  int              `json:"deploying_count"`
 	CreatedAt       string           `json:"created_at"`
 	AvailableAt     *string          `json:"available_at"`
@@ -103,12 +107,38 @@ func parseQuota(resp []byte) (Quota, error) {
 	return q, nil
 }
 
-// sizeGB is the disk size used for billing: disk_gb once known, else the estimate.
-func (s Snapshot) sizeGB() string {
+// diskGB is the size of the copied disk (the quota counts it): disk_gb once
+// known, else the estimate.
+func (s Snapshot) diskGB() string {
 	if s.DiskGB != nil {
 		return fmt.Sprintf("%d GB", *s.DiskGB)
 	}
 	return fmt.Sprintf("~%d GB", s.EstimatedGB)
+}
+
+// storedGB is the stored size that is billed, "-" until it is known.
+func (s Snapshot) storedGB() string {
+	if s.BillableGB == nil {
+		return "-"
+	}
+	return strconv.FormatFloat(*s.BillableGB, 'f', -1, 64) + " GB"
+}
+
+// maxMonthly is the monthly cost with the whole disk stored; older APIs without
+// max_monthly_cost bill a snapshot that is not stored yet on its disk size.
+func (s Snapshot) maxMonthly() float64 {
+	if s.MaxMonthlyCost > 0 {
+		return s.MaxMonthlyCost
+	}
+	return s.MonthlyCost
+}
+
+// monthly is the monthly cost, or its upper bound while the stored size is unknown.
+func (s Snapshot) monthly() string {
+	if s.BillableGB == nil {
+		return "up to " + money(s.maxMonthly())
+	}
+	return money(s.MonthlyCost)
 }
 
 func (s Snapshot) sourceVPS() string {
@@ -183,8 +213,9 @@ func NewCmd() *cobra.Command {
 A snapshot is a permanent copy of a VPS disk, taken directly from the server
 (backups do not need to be enabled) or converted from a completed backup.
 It belongs to the organization: it does not expire with the backup retention and
-survives the deletion of the source VPS. It is billed per GB of disk per month
-until deleted (see "cubecli snapshot quota" for the price and your limits).
+survives the deletion of the source VPS. It is billed per GB actually stored per
+month (compressed, usually well below the disk size), never more than the full
+disk, until deleted (see "cubecli snapshot quota" for the price and your limits).
 
 Deploy a new VPS from a snapshot in any location with:
   cubecli vps create --snapshot <uuid> ...`,
@@ -262,7 +293,7 @@ func listCmd() *cobra.Command {
 				return nil
 			}
 
-			t := output.NewTable("Snapshots", []string{"UUID", "Name", "Source VPS", "OS", "Location", "Size", "Created", "Status", "Monthly"})
+			t := output.NewTable("Snapshots", []string{"UUID", "Name", "Source VPS", "OS", "Location", "Disk", "Stored", "Created", "Status", "Monthly"})
 			for _, sn := range result.Snapshots {
 				t.AddRow(
 					sn.UUID,
@@ -270,10 +301,11 @@ func listCmd() *cobra.Command {
 					sn.sourceVPS(),
 					sn.osName(),
 					locationName(sn.Location),
-					sn.sizeGB(),
+					sn.diskGB(),
+					sn.storedGB(),
 					sn.CreatedAt,
 					output.FormatStatus(sn.Status),
-					money(sn.MonthlyCost),
+					sn.monthly(),
 				)
 			}
 			t.Render()
@@ -327,7 +359,8 @@ func getCmd() *cobra.Command {
 			}
 			info.AddRow("Status", output.FormatStatus(sn.Status))
 			info.AddRow("OS", sn.osName())
-			info.AddRow("Size", sn.sizeGB())
+			info.AddRow("Disk", sn.diskGB())
+			info.AddRow("Stored", sn.storedGB())
 			info.AddRow("Location", locationName(sn.Location))
 			info.AddRow("Stored in", locationName(sn.StoreLocation))
 			if sn.ProjectID != nil {
@@ -335,8 +368,8 @@ func getCmd() *cobra.Command {
 			}
 			info.AddRow("Origin", sn.origin())
 			info.AddRow("Source VPS", sn.sourceVPS())
-			info.AddRow("Price", fmt.Sprintf("$%s per GB per month", strconv.FormatFloat(sn.PriceGBMonth, 'f', -1, 64)))
-			info.AddRow("Cost", fmt.Sprintf("%s/month (%s/hour)", money(sn.MonthlyCost), strconv.FormatFloat(sn.HourlyCost, 'f', 6, 64)))
+			info.AddRow("Price", fmt.Sprintf("$%s per GB stored per month", strconv.FormatFloat(sn.PriceGBMonth, 'f', -1, 64)))
+			info.AddRow("Cost", fmt.Sprintf("%s/month (%s/hour)", sn.monthly(), strconv.FormatFloat(sn.HourlyCost, 'f', 6, 64)))
 			info.AddRow("Deploying now", strconv.Itoa(sn.DeployingCount))
 			info.AddRow("Created", sn.CreatedAt)
 			info.AddRow("Available since", strOr(sn.AvailableAt, "-"))
@@ -382,7 +415,7 @@ func quotaCmd() *cobra.Command {
 			t := output.NewTable("Snapshot Quota", []string{"Field", "Value"})
 			t.AddRow("Count", fmt.Sprintf("%d / %d", q.Count, q.CountMax))
 			t.AddRow("Storage", fmt.Sprintf("%d / %d GB", q.GB, q.GBMax))
-			t.AddRow("Price", fmt.Sprintf("$%s per GB per month", strconv.FormatFloat(q.PriceGBMonth, 'f', -1, 64)))
+			t.AddRow("Price", fmt.Sprintf("$%s per GB stored per month", strconv.FormatFloat(q.PriceGBMonth, 'f', -1, 64)))
 			t.Render()
 			return nil
 		},
@@ -404,7 +437,8 @@ writes of a database first if you need it consistent.
 With --backup it converts that completed backup instead (find the ID with
 "cubecli vps backup list <vps_id>").
 
-The snapshot is billed per GB of the VPS disk per month until you delete it.
+The snapshot is billed per GB actually stored per month (compressed, usually
+well below the disk size), never more than the full disk, until you delete it.
 It is queued and takes a few minutes: follow it with
 "cubecli snapshot get <uuid>" until its status is available.`,
 		Example: `  cubecli snapshot create --vps 20467 --name web-01-golden
@@ -461,7 +495,7 @@ It is queued and takes a few minutes: follow it with
 			}
 			output.PrintSuccess(msg)
 			if r.Snapshot.UUID != "" {
-				output.PrintInfo(fmt.Sprintf("Snapshot %s, about %s/month. Follow it with: cubecli snapshot get %s", r.Snapshot.UUID, money(r.Snapshot.MonthlyCost), r.Snapshot.UUID))
+				output.PrintInfo(fmt.Sprintf("Snapshot %s, up to %s/month. Follow it with: cubecli snapshot get %s", r.Snapshot.UUID, money(r.Snapshot.maxMonthly()), r.Snapshot.UUID))
 			}
 			return nil
 		},

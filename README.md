@@ -217,7 +217,7 @@ not from cubecli.
 | `cubecli vps console <id>` | VNC console session |
 | `cubecli availability-group list\|show\|create\|delete\|add-vps\|remove-vps\|move-project` | Availability groups |
 
-VPS snapshots are permanent copies of a VPS disk, taken directly from the server (backups do not need to be enabled) or converted from a completed backup. They do not expire with the backup retention, survive the source VPS and are billed per GB of disk per month until deleted. Deploy one in any location on a plan with at least the same disk:
+VPS snapshots are permanent copies of a VPS disk, taken directly from the server (backups do not need to be enabled) or converted from a completed backup. They do not expire with the backup retention, survive the source VPS and are billed per GB actually stored per month (compressed, never more than the full disk) until deleted; `snapshot list` and `snapshot get` show the disk and the stored size. Deploy one in any location on a plan with at least the same disk:
 
 ```bash
 cubecli snapshot create --vps 20467 --name web-01-golden             # snapshot the VPS now
