@@ -467,23 +467,24 @@ cubecli s3 events rule delete on-created-removed --bucket photos
 
 ### Managed Databases
 
-MySQL, PostgreSQL and Valkey (alias `mdb`). Plans are priced per node.
+MySQL 8.4 today (PostgreSQL and Valkey are coming), alias `mdb`. Each instance is one dedicated server per node at `<id>.cubemdb.io`, reached over TLS. Plans are priced per node. Daily backups are always on: choose their hour (UTC) and retention (1-30 days).
 
 | Command | Description |
 |---------|-------------|
 | `cubecli mdb plans [--engine mysql]` | Plans per location |
-| `cubecli mdb list\|show\|create\|update\|delete` | Instance management |
-| `cubecli mdb scale <uuid> --replicas N\|--plan <uuid>` | Horizontal or vertical scaling |
+| `cubecli mdb list\|show\|create\|update\|delete` | Instance management (`--backup-hour`, `--backup-retention` on create and update; `show` includes engine health) |
+| `cubecli mdb scale <uuid> --replicas N\|--plan <uuid>` | Nodes (1 for now) or vertical scaling |
 | `cubecli mdb credentials\|rotate-credentials <uuid>` | Admin connection credentials |
 | `cubecli mdb config show\|set <uuid>` | Engine parameters |
-| `cubecli mdb metrics <uuid>` | Connections, CPU, memory, replication lag |
+| `cubecli mdb metrics <uuid>` | Availability, connections, queries, CPU, memory, network, disk |
 | `cubecli mdb database list\|create\|delete` | Logical databases |
 | `cubecli mdb user list\|create\|delete` | Database users (the password is shown once) |
 | `cubecli mdb protection <uuid>` | Destruction protection |
 
 ```bash
-cubecli mdb create --name app-db --engine postgresql --version 17.5.0 --plan <plan_uuid> --project 12 --replicas 2
+cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --backup-hour 3 --backup-retention 14
 cubecli mdb credentials <uuid>
+mysql -h <id>.cubemdb.io -u <user> -p --ssl-mode=VERIFY_IDENTITY
 ```
 
 ### Cloud Alerts

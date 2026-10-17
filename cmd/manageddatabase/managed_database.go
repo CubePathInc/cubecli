@@ -17,10 +17,11 @@ func NewCmd() *cobra.Command {
 	mdbCmd := &cobra.Command{
 		Use:     "managed-database",
 		Aliases: []string{"mdb", "dbaas"},
-		Short:   "Manage managed databases (MySQL, PostgreSQL, Valkey)",
-		Long: `Manage CubePath Managed Databases: highly available MySQL, PostgreSQL and
-Valkey clusters. Each replica runs on its own node; plans are sized and priced
-per node.
+		Short:   "Manage managed databases (MySQL; PostgreSQL and Valkey coming)",
+		Long: `Manage CubePath Managed Databases (MySQL today, PostgreSQL and Valkey are
+coming). Each node is a dedicated server reached over TLS at
+<id>.cubemdb.io; plans are sized and priced per node. Daily backups are always
+on: you choose their hour (UTC) and how long they are kept.
 
 Provisioning and every change (scale, configuration, credential rotation) run
 in the background: check progress with 'managed-database show'.`,
@@ -135,6 +136,67 @@ func (s summary) endpoint() string {
 	return fmt.Sprintf("%s:%d", s.EndpointHost, *s.EndpointPort)
 }
 
+// health is what the engine reports about itself (null until measured).
+type health struct {
+	Up          bool   `json:"up"`
+	Role        string `json:"role"`
+	Version     string `json:"version"`
+	Connections int    `json:"connections"`
+	MaxConns    int    `json:"max_connections"`
+	LatencyMS   int    `json:"latency_ms"`
+	ErrorKind   string `json:"error_kind"`
+	NodesTotal  int    `json:"nodes_total"`
+	NodesUp     int    `json:"nodes_up"`
+}
+
+// detail is GET /managed-databases/{uuid}.
+type detail struct {
+	summary
+	Topology string `json:"topology"`
+	Plan     struct {
+		Name         string  `json:"name"`
+		CPU          int     `json:"cpu"`
+		MemoryGB     float64 `json:"memory_gb"`
+		StorageGB    int     `json:"storage_gb"`
+		PricePerHour float64 `json:"price_per_hour"`
+	} `json:"plan"`
+	Location struct {
+		LocationName string `json:"location_name"`
+	} `json:"location"`
+	BackupHourUTC       *int    `json:"backup_hour_utc"`
+	BackupRetentionDays int     `json:"backup_retention_days"`
+	BillingType         string  `json:"billing_type"`
+	UpdatedAt           string  `json:"updated_at"`
+	Health              *health `json:"health"`
+	MetricsAvailable    *bool   `json:"metrics_available"`
+}
+
+func (d detail) backupSummary() string {
+	if d.BackupHourUTC == nil {
+		return fmt.Sprintf("daily, kept %d days", d.BackupRetentionDays)
+	}
+	return fmt.Sprintf("daily at %02d:00 UTC, kept %d days", *d.BackupHourUTC, d.BackupRetentionDays)
+}
+
+func (d detail) healthSummary() string {
+	if d.MetricsAvailable != nil && !*d.MetricsAvailable {
+		return "unavailable (metrics database unreachable)"
+	}
+	h := d.Health
+	if h == nil {
+		return "not measured yet"
+	}
+	nodes := fmt.Sprintf("%d/%d nodes up", h.NodesUp, h.NodesTotal)
+	if !h.Up {
+		reason := h.ErrorKind
+		if reason == "" {
+			reason = "unreachable"
+		}
+		return fmt.Sprintf("down (%s), %s", reason, nodes)
+	}
+	return fmt.Sprintf("up, %s, %d/%d connections, %d ms, %s", h.Role, h.Connections, h.MaxConns, h.LatencyMS, nodes)
+}
+
 // --- list ---
 
 func listCmd() *cobra.Command {
@@ -208,25 +270,7 @@ func showCmd() *cobra.Command {
 				return output.PrintJSON(json.RawMessage(resp))
 			}
 
-			var md struct {
-				summary
-				Topology string `json:"topology"`
-				Plan     struct {
-					Name         string  `json:"name"`
-					CPU          int     `json:"cpu"`
-					MemoryGB     float64 `json:"memory_gb"`
-					StorageGB    int     `json:"storage_gb"`
-					PricePerHour float64 `json:"price_per_hour"`
-				} `json:"plan"`
-				Location struct {
-					LocationName string `json:"location_name"`
-				} `json:"location"`
-				BackupEnabled       bool   `json:"backup_enabled"`
-				BackupScheduleCron  string `json:"backup_schedule_cron"`
-				BackupRetentionDays int    `json:"backup_retention_days"`
-				BillingType         string `json:"billing_type"`
-				UpdatedAt           string `json:"updated_at"`
-			}
+			var md detail
 			if err := json.Unmarshal(resp, &md); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
@@ -247,13 +291,10 @@ func showCmd() *cobra.Command {
 			info.AddRow("Endpoint", md.endpoint())
 			info.AddRow("Project", strconv.Itoa(md.ProjectID))
 			info.AddRow("Billing", md.BillingType)
-			backup := "disabled"
-			if md.BackupEnabled {
-				backup = fmt.Sprintf("%s, kept %d days", md.BackupScheduleCron, md.BackupRetentionDays)
-			}
-			info.AddRow("Backups", backup)
+			info.AddRow("Backups", md.backupSummary())
 			info.AddRow("Protected", cmdutil.YesNo(md.Protected))
 			info.AddRow("Updated", md.UpdatedAt)
+			info.AddRow("Health", md.healthSummary())
 			info.Render()
 			return nil
 		},
@@ -267,9 +308,13 @@ func createCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a managed database",
 		Long: `Create a managed database. The plan decides the location and the size of
-each node; see 'managed-database plans'. Provisioning takes several minutes.`,
-		Example: `  cubecli mdb create --name app-db --engine mysql --version 8.0.39 --plan <plan_uuid> --project 12
-  cubecli mdb create --name cache --engine valkey --version 7.2.11 --plan <plan_uuid> --project 12 --replicas 2`,
+each node; see 'managed-database plans'. Provisioning takes several minutes.
+
+Only MySQL 8.4 can be created for now. Backups are always on: pick the hour
+(UTC, 0-23) of the daily backup with --backup-hour (an hour is chosen for you
+if omitted) and how many days they are kept with --backup-retention (1-30).`,
+		Example: `  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12
+  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --backup-hour 3 --backup-retention 14`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
@@ -293,12 +338,7 @@ each node; see 'managed-database plans'. Provisioning takes several minutes.`,
 			if topology, _ := cmd.Flags().GetString("topology"); topology != "" {
 				body["topology"] = topology
 			}
-			if cron, _ := cmd.Flags().GetString("backup-schedule"); cron != "" {
-				backup := map[string]interface{}{"schedule_cron": cron}
-				if cmd.Flags().Changed("backup-retention") {
-					days, _ := cmd.Flags().GetInt("backup-retention")
-					backup["retention_days"] = days
-				}
+			if backup := backupBody(cmd); len(backup) > 0 {
 				body["backup"] = backup
 			}
 
@@ -328,13 +368,12 @@ each node; see 'managed-database plans'. Provisioning takes several minutes.`,
 	}
 	cmd.Flags().StringP("name", "n", "", "Name (lowercase letters, digits and hyphens)")
 	cmd.Flags().StringP("engine", "e", "", "Engine: mysql, postgresql or valkey")
-	cmd.Flags().String("version", "", "Engine version (e.g. 8.0.39, 17.5.0, 7.2.11)")
+	cmd.Flags().String("version", "", "Engine version (MySQL: 8.4)")
 	cmd.Flags().String("plan", "", "Plan UUID (see 'managed-database plans')")
 	cmd.Flags().IntP("project", "p", 0, "Project ID")
-	cmd.Flags().Int("replicas", 3, "Number of replicas (one node each)")
+	cmd.Flags().Int("replicas", 1, "Number of nodes: 1, or 3 for high availability (3 is not available yet)")
 	cmd.Flags().String("topology", "", "Topology (defaults per engine)")
-	cmd.Flags().String("backup-schedule", "", "Backup schedule as a 5-field cron expression")
-	cmd.Flags().Int("backup-retention", 7, "Backup retention in days (with --backup-schedule)")
+	addBackupFlags(cmd, "Hour (UTC, 0-23) of the daily backup (default: chosen for you)", "Days the backups are kept (1-30, default 7)")
 	_ = cmd.MarkFlagRequired("name")
 	_ = cmd.MarkFlagRequired("engine")
 	_ = cmd.MarkFlagRequired("version")
@@ -348,7 +387,7 @@ each node; see 'managed-database plans'. Provisioning takes several minutes.`,
 func updateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <md_uuid>",
-		Short: "Update a managed database's name, label or backup policy",
+		Short: "Update a managed database's name, label or backup hour and retention",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
@@ -362,24 +401,11 @@ func updateCmd() *cobra.Command {
 				v, _ := cmd.Flags().GetString("label")
 				body["label"] = v
 			}
-			backup := map[string]interface{}{}
-			if cmd.Flags().Changed("backup-enabled") {
-				v, _ := cmd.Flags().GetBool("backup-enabled")
-				backup["enabled"] = v
-			}
-			if cmd.Flags().Changed("backup-schedule") {
-				v, _ := cmd.Flags().GetString("backup-schedule")
-				backup["schedule_cron"] = v
-			}
-			if cmd.Flags().Changed("backup-retention") {
-				v, _ := cmd.Flags().GetInt("backup-retention")
-				backup["retention_days"] = v
-			}
-			if len(backup) > 0 {
+			if backup := backupBody(cmd); len(backup) > 0 {
 				body["backup"] = backup
 			}
 			if len(body) == 0 {
-				return fmt.Errorf("at least one of --name, --label, --backup-enabled, --backup-schedule or --backup-retention must be specified")
+				return fmt.Errorf("at least one of --name, --label, --backup-hour or --backup-retention must be specified")
 			}
 
 			s := output.NewSpinner("Updating managed database...")
@@ -399,10 +425,28 @@ func updateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringP("name", "n", "", "New name")
 	cmd.Flags().String("label", "", "New label")
-	cmd.Flags().Bool("backup-enabled", false, "Enable or disable backups (--backup-enabled=false to disable)")
-	cmd.Flags().String("backup-schedule", "", "Backup schedule as a 5-field cron expression")
-	cmd.Flags().Int("backup-retention", 0, "Backup retention in days")
+	addBackupFlags(cmd, "New hour (UTC, 0-23) of the daily backup", "New number of days the backups are kept (1-30)")
 	return cmd
+}
+
+func addBackupFlags(cmd *cobra.Command, hourUsage, retentionUsage string) {
+	cmd.Flags().Int("backup-hour", 0, hourUsage)
+	cmd.Flags().Int("backup-retention", 0, retentionUsage)
+}
+
+// backupBody builds the "backup" object from the flags that were set. Backups
+// are always on, so there is no way to disable them.
+func backupBody(cmd *cobra.Command) map[string]interface{} {
+	backup := map[string]interface{}{}
+	if cmd.Flags().Changed("backup-hour") {
+		v, _ := cmd.Flags().GetInt("backup-hour")
+		backup["hour_utc"] = v
+	}
+	if cmd.Flags().Changed("backup-retention") {
+		v, _ := cmd.Flags().GetInt("backup-retention")
+		backup["retention_days"] = v
+	}
+	return backup
 }
 
 // --- delete ---
@@ -443,7 +487,7 @@ func deleteCmd() *cobra.Command {
 func scaleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "scale <md_uuid>",
-		Short: "Change the number of replicas or move to another plan",
+		Short: "Change the number of nodes or move to another plan",
 		Args:  cobra.ExactArgs(1),
 		Example: `  cubecli mdb scale <md_uuid> --replicas 5
   cubecli mdb scale <md_uuid> --plan <plan_uuid>`,
@@ -522,6 +566,11 @@ func credentialsCmd() *cobra.Command {
 			t.AddRow("Password", c.Password)
 			t.AddRow("URI", c.URI)
 			t.Render()
+			if strings.HasPrefix(c.URI, "mysql://") {
+				output.PrintInfo(fmt.Sprintf("TLS is required: mysql -h %s -P %d -u %s -p --ssl-mode=VERIFY_IDENTITY", c.Host, c.Port, c.Username))
+			} else {
+				output.PrintInfo("TLS is required to connect to this endpoint")
+			}
 			return nil
 		},
 	}
@@ -714,7 +763,7 @@ func parseParams(pairs []string) (map[string]interface{}, error) {
 func metricsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "metrics <md_uuid>",
-		Short: "Show time-series metrics (connections, cpu, memory, replication lag)",
+		Short: "Show time-series metrics (availability, connections, queries, cpu, memory, network, disk)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
@@ -746,6 +795,6 @@ func metricsCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("range", "1h", "Time range: 1h, 24h, 7d, 30d...")
-	cmd.Flags().StringSlice("metric", nil, "Metrics to fetch (connections, cpu, memory, replication_lag); default all")
+	cmd.Flags().StringSlice("metric", nil, "Metrics to fetch (up, latency_ms, connections, queries, buffer_pool_hit_ratio, cpu, memory, disk_read, network_receive...); default all")
 	return cmd
 }
