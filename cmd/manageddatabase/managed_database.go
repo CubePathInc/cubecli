@@ -20,8 +20,10 @@ func NewCmd() *cobra.Command {
 		Short:   "Manage managed databases (MySQL; PostgreSQL and Valkey coming)",
 		Long: `Manage CubePath Managed Databases (MySQL today, PostgreSQL and Valkey are
 coming). Each node is a dedicated server reached over TLS at
-<id>.cubemdb.io; plans are sized and priced per node. Daily backups are always
-on: you choose their hour (UTC) and how long they are kept.
+<id>.cubemdb.io; plans are sized and priced per node. With 3 nodes (high
+availability, automatic failover) <id>.cubemdb.io always answers on the primary
+and <id>-ro.cubemdb.io on the replicas. Daily backups are always on: you
+choose their hour (UTC) and how long they are kept.
 
 Provisioning and every change (scale, configuration, credential rotation) run
 in the background: check progress with 'managed-database show'.`,
@@ -36,6 +38,7 @@ in the background: check progress with 'managed-database show'.`,
 		deleteCmd(),
 		cmdutil.ProtectionCmd("md_uuid", "Managed database", cmdutil.StringPath("/managed-databases/%s/protection")),
 		scaleCmd(),
+		failoversCmd(),
 		credentialsCmd(),
 		rotateCredentialsCmd(),
 		configCmd(),
@@ -149,9 +152,43 @@ type health struct {
 	NodesUp     int    `json:"nodes_up"`
 }
 
+// node is one server of the database as the detail lists it.
+type node struct {
+	Ordinal          int      `json:"ordinal"`
+	Status           string   `json:"status"`
+	Role             string   `json:"role"`
+	Up               *bool    `json:"up"`
+	ReplicationState string   `json:"replication_state"`
+	LagSeconds       *float64 `json:"lag_seconds"`
+}
+
+func (n node) state() string {
+	if n.Status != "active" {
+		return n.Status
+	}
+	switch {
+	case n.Up == nil:
+		return "not measured"
+	case !*n.Up:
+		return "down"
+	case n.Role == "replica" && n.ReplicationState != "":
+		return n.ReplicationState
+	}
+	return "up"
+}
+
+func (n node) lag() string {
+	if n.Role != "replica" || n.LagSeconds == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%.1f s", *n.LagSeconds)
+}
+
 // detail is GET /managed-databases/{uuid}.
 type detail struct {
 	summary
+	ReadHost string `json:"read_host"`
+	Nodes    []node `json:"nodes"`
 	Topology string `json:"topology"`
 	Plan     struct {
 		Name         string  `json:"name"`
@@ -289,6 +326,9 @@ func showCmd() *cobra.Command {
 			info.AddRow("Price/Hour", fmt.Sprintf("$%.5f per node, $%.5f total", md.Plan.PricePerHour, md.Plan.PricePerHour*float64(md.Replicas)))
 			info.AddRow("Location", md.Location.LocationName)
 			info.AddRow("Endpoint", md.endpoint())
+			if md.Replicas >= 3 && md.ReadHost != "" && md.EndpointPort != nil {
+				info.AddRow("Read endpoint", fmt.Sprintf("%s:%d", md.ReadHost, *md.EndpointPort))
+			}
 			info.AddRow("Project", strconv.Itoa(md.ProjectID))
 			info.AddRow("Billing", md.BillingType)
 			info.AddRow("Backups", md.backupSummary())
@@ -296,6 +336,18 @@ func showCmd() *cobra.Command {
 			info.AddRow("Updated", md.UpdatedAt)
 			info.AddRow("Health", md.healthSummary())
 			info.Render()
+
+			if len(md.Nodes) > 1 {
+				nodes := output.NewTable("Nodes", []string{"Node", "Role", "State", "Lag"})
+				for _, n := range md.Nodes {
+					role := n.Role
+					if role == "" {
+						role = "-"
+					}
+					nodes.AddRow(fmt.Sprintf("n%d", n.Ordinal), role, n.state(), n.lag())
+				}
+				nodes.Render()
+			}
 			return nil
 		},
 	}
@@ -310,11 +362,15 @@ func createCmd() *cobra.Command {
 		Long: `Create a managed database. The plan decides the location and the size of
 each node; see 'managed-database plans'. Provisioning takes several minutes.
 
-Only MySQL 8.4 can be created for now. Backups are always on: pick the hour
+Only MySQL 8.4 can be created for now. --replicas 3 creates a high
+availability database (3 nodes in different hypervisors, automatic failover,
+a read endpoint); each node is billed at the price of the plan, and the plan
+must allow it (see Max Replicas in 'managed-database plans'). Backups are always on: pick the hour
 (UTC, 0-23) of the daily backup with --backup-hour (an hour is chosen for you
 if omitted) and how many days they are kept with --backup-retention (1-30).`,
 		Example: `  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12
-  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --backup-hour 3 --backup-retention 14`,
+  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --backup-hour 3 --backup-retention 14
+  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --replicas 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
@@ -371,7 +427,7 @@ if omitted) and how many days they are kept with --backup-retention (1-30).`,
 	cmd.Flags().String("version", "", "Engine version (MySQL: 8.4)")
 	cmd.Flags().String("plan", "", "Plan UUID (see 'managed-database plans')")
 	cmd.Flags().IntP("project", "p", 0, "Project ID")
-	cmd.Flags().Int("replicas", 1, "Number of nodes: 1, or 3 for high availability (3 is not available yet)")
+	cmd.Flags().Int("replicas", 1, "Number of nodes: 1, or 3 for high availability with automatic failover")
 	cmd.Flags().String("topology", "", "Topology (defaults per engine)")
 	addBackupFlags(cmd, "Hour (UTC, 0-23) of the daily backup (default: chosen for you)", "Days the backups are kept (1-30, default 7)")
 	_ = cmd.MarkFlagRequired("name")
@@ -487,9 +543,14 @@ func deleteCmd() *cobra.Command {
 func scaleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "scale <md_uuid>",
-		Short: "Change the number of nodes or move to another plan",
-		Args:  cobra.ExactArgs(1),
-		Example: `  cubecli mdb scale <md_uuid> --replicas 5
+		Short: "Change the number of nodes (1 or 3) or move to another plan",
+		Long: `Go from 1 node to 3 (high availability: two nodes are added and seeded from
+the primary while the database stays available) or from 3 to 1, or move to
+another plan of the same engine and location (rolling with 3 nodes, a short
+outage with 1). Each node is billed at the price of the plan.`,
+		Args: cobra.ExactArgs(1),
+		Example: `  cubecli mdb scale <md_uuid> --replicas 3
+  cubecli mdb scale <md_uuid> --replicas 1
   cubecli mdb scale <md_uuid> --plan <plan_uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
@@ -521,7 +582,7 @@ func scaleCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().Int("replicas", 0, "New number of replicas")
+	cmd.Flags().Int("replicas", 0, "New number of nodes: 1 or 3")
 	cmd.Flags().String("plan", "", "UUID of the new plan (same engine and location)")
 	return cmd
 }
@@ -550,6 +611,7 @@ func credentialsCmd() *cobra.Command {
 
 			var c struct {
 				Host     string `json:"host"`
+				ReadHost string `json:"read_host"`
 				Port     int    `json:"port"`
 				Username string `json:"username"`
 				Password string `json:"password"`
@@ -561,6 +623,9 @@ func credentialsCmd() *cobra.Command {
 
 			t := output.NewTable("Connection Credentials", []string{"Field", "Value"})
 			t.AddRow("Host", c.Host)
+			if c.ReadHost != "" {
+				t.AddRow("Read host", c.ReadHost)
+			}
 			t.AddRow("Port", strconv.Itoa(c.Port))
 			t.AddRow("Username", c.Username)
 			t.AddRow("Password", c.Password)
@@ -574,6 +639,59 @@ func credentialsCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// --- failovers ---
+
+func failoversCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "failovers <md_uuid>",
+		Short: "Show the changes of primary of a 3-node database",
+		Long: `Show when a node became the primary (primary_elected) or stopped being it
+(primary_lost), newest first. A failover is a primary_lost followed by a
+primary_elected on another node. Empty for a database with one node.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := cmdutil.GetClient(cmd)
+			rng, _ := cmd.Flags().GetString("range")
+
+			s := output.NewSpinner("Fetching failovers...")
+			s.Start()
+			resp, err := client.Get(fmt.Sprintf("/managed-databases/%s/failovers?time_range=%s", args[0], url.QueryEscape(rng)))
+			s.Stop()
+			if err != nil {
+				return err
+			}
+
+			if cmdutil.IsJSON(cmd) {
+				return output.PrintJSON(json.RawMessage(resp))
+			}
+
+			var result struct {
+				TimeRange string `json:"time_range"`
+				Failovers []struct {
+					At          string `json:"at"`
+					Event       string `json:"event"`
+					NodeOrdinal int    `json:"node_ordinal"`
+				} `json:"failovers"`
+			}
+			if err := json.Unmarshal(resp, &result); err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
+			}
+			if len(result.Failovers) == 0 {
+				output.PrintInfo(fmt.Sprintf("No change of primary in the last %s", result.TimeRange))
+				return nil
+			}
+			t := output.NewTable("Failovers (last "+result.TimeRange+")", []string{"When (UTC)", "Event", "Node"})
+			for _, f := range result.Failovers {
+				t.AddRow(f.At, f.Event, fmt.Sprintf("n%d", f.NodeOrdinal))
+			}
+			t.Render()
+			return nil
+		},
+	}
+	cmd.Flags().String("range", "24h", "Period: 24h, 7d, 30d or 90d")
+	return cmd
 }
 
 func rotateCredentialsCmd() *cobra.Command {

@@ -183,3 +183,91 @@ func TestProtectionAndPlans(t *testing.T) {
 		t.Fatalf("got %s", r.Path)
 	}
 }
+
+func TestShowHighAvailability(t *testing.T) {
+	body := `{"uuid":"md-1","project_id":12,"name":"app-db","engine":"mysql","version":"8.4","topology":"mgr","replicas":3,"status":"active",
+"endpoint_host":"abcd1234.cubemdb.io","read_host":"abcd1234-ro.cubemdb.io","endpoint_port":3306,
+"plan":{"name":"mdb-1","cpu":2,"memory_gb":4,"storage_gb":50,"price_per_hour":0.01},
+"location":{"location_name":"bcn-1"},"backup_hour_utc":5,"backup_retention_days":9,"billing_type":"hourly","protected":false,"updated_at":"2026-10-17T10:00:00",
+"nodes":[{"ordinal":0,"status":"active","role":"primary","up":true,"replication_state":null,"lag_seconds":null},
+{"ordinal":1,"status":"active","role":"replica","up":true,"replication_state":"lagging","lag_seconds":12.5},
+{"ordinal":2,"status":"active","role":null,"up":false,"replication_state":null,"lag_seconds":null}],
+"metrics_available":true}`
+	out, _, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) { return 200, body }, "show", "md-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"abcd1234-ro.cubemdb.io:3306", "n1", "lagging", "12.5 s", "down", "$0.03000 total"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in %s", want, out)
+		}
+	}
+}
+
+func TestShowSingleNodeHasNoReadEndpointNorNodeTable(t *testing.T) {
+	body := `{"uuid":"md-1","name":"app-db","engine":"mysql","version":"8.4","replicas":1,"status":"active",
+"endpoint_host":"abcd1234.cubemdb.io","read_host":"abcd1234-ro.cubemdb.io","endpoint_port":3306,"plan":{"name":"mdb-1"},"location":{},
+"nodes":[{"ordinal":0,"status":"active","role":"primary","up":true}]}`
+	out, _, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) { return 200, body }, "show", "md-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "Read endpoint") || strings.Contains(out, "Nodes") {
+		t.Fatalf("one node shows HA fields: %s", out)
+	}
+}
+
+func TestCreateThreeNodes(t *testing.T) {
+	_, reqs, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) {
+		return 201, `{"uuid":"md-1","status":"provisioning"}`
+	}, "create", "--name", "app-db", "--engine", "mysql", "--version", "8.4", "--plan", "plan-1", "--project", "12", "--replicas", "3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := cmdtest.Last(reqs).Obj(); b["replicas"] != 3.0 {
+		t.Fatalf("body %v", b)
+	}
+}
+
+func TestScaleToThreeNodes(t *testing.T) {
+	_, reqs, err := cmdtest.Run(t, NewCmd(), nil, "scale", "md-1", "--replicas", "3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := cmdtest.Last(reqs)
+	if r.Method != http.MethodPost || r.Path != "/managed-databases/md-1/scale" || r.Obj()["replicas"] != 3.0 || len(r.Obj()) != 1 {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestCredentialsShowReadHost(t *testing.T) {
+	out, _, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) {
+		return 200, `{"host":"abcd1234.cubemdb.io","read_host":"abcd1234-ro.cubemdb.io","port":3306,"username":"admin","password":"pw","uri":"mysql://admin:pw@abcd1234.cubemdb.io:3306"}`
+	}, "credentials", "md-1")
+	if err != nil || !strings.Contains(out, "abcd1234-ro.cubemdb.io") {
+		t.Fatalf("err %v out %s", err, out)
+	}
+}
+
+func TestFailovers(t *testing.T) {
+	out, reqs, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) {
+		return 200, `{"time_range":"7d","failovers":[{"at":"2026-10-18T10:04:12Z","event":"primary_elected","node_ordinal":1},{"at":"2026-10-18T10:04:02Z","event":"primary_lost","node_ordinal":0}]}`
+	}, "failovers", "md-1", "--range", "7d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := cmdtest.Last(reqs); r.Path != "/managed-databases/md-1/failovers?time_range=7d" {
+		t.Fatalf("got %s", r.Path)
+	}
+	for _, want := range []string{"primary_elected", "primary_lost", "n1", "n0"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in %s", want, out)
+		}
+	}
+	out, _, err = cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) {
+		return 200, `{"time_range":"24h","failovers":[]}`
+	}, "failovers", "md-1")
+	if err != nil || !strings.Contains(out, "No change of primary") {
+		t.Fatalf("err %v out %s", err, out)
+	}
+}

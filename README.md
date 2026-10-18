@@ -467,13 +467,14 @@ cubecli s3 events rule delete on-created-removed --bucket photos
 
 ### Managed Databases
 
-MySQL 8.4 today (PostgreSQL and Valkey are coming), alias `mdb`. Each instance is one dedicated server per node at `<id>.cubemdb.io`, reached over TLS. Plans are priced per node. Daily backups are always on: choose their hour (UTC) and retention (1-30 days).
+MySQL 8.4 today (PostgreSQL and Valkey are coming), alias `mdb`. Each instance is one dedicated server per node at `<id>.cubemdb.io`, reached over TLS. Plans are priced per node. With 3 nodes (`--replicas 3`: high availability with automatic failover) `<id>.cubemdb.io` always answers on the primary and `<id>-ro.cubemdb.io` (`read_host` in `show` and `credentials`) on the healthy replicas. Daily backups are always on: choose their hour (UTC) and retention (1-30 days).
 
 | Command | Description |
 |---------|-------------|
 | `cubecli mdb plans [--engine mysql]` | Plans per location |
-| `cubecli mdb list\|show\|create\|update\|delete` | Instance management (`--backup-hour`, `--backup-retention` on create and update; `show` includes engine health) |
-| `cubecli mdb scale <uuid> --replicas N\|--plan <uuid>` | Nodes (1 for now) or vertical scaling |
+| `cubecli mdb list\|show\|create\|update\|delete` | Instance management (`--backup-hour`, `--backup-retention` on create and update, `--replicas 3` on create; `show` includes engine health, the read endpoint and the nodes of a 3-node database) |
+| `cubecli mdb scale <uuid> --replicas 1\|3\|--plan <uuid>` | Nodes (1 to 3 for high availability, 3 to 1) or vertical scaling |
+| `cubecli mdb failovers <uuid> [--range 24h\|7d\|30d\|90d]` | Changes of the primary of a 3-node database |
 | `cubecli mdb credentials\|rotate-credentials <uuid>` | Admin connection credentials |
 | `cubecli mdb config show\|set <uuid>` | Engine parameters |
 | `cubecli mdb metrics <uuid>` | Availability, connections, queries, CPU, memory, network, disk |
