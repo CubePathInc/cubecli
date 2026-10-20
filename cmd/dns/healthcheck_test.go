@@ -72,7 +72,7 @@ func TestHealthCheckSetAllFields(t *testing.T) {
 	_, reqs, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) { return 200, hcWithSummary },
 		"hc", "set", "z1", "r1", "--name", "db", "--type", "tcp", "--target", "db.example.com", "--port", "5432",
 		"--path", "/x", "--expected-status", "204", "--interval", "30", "--timeout", "3",
-		"--healthy-threshold", "4", "--unhealthy-threshold", "5", "--disabled")
+		"--healthy-threshold", "4", "--unhealthy-threshold", "5", "--disabled", "--strict")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestHealthCheckSetAllFields(t *testing.T) {
 	want := map[string]interface{}{
 		"name": "db", "check_type": "tcp", "target": "db.example.com", "port": 5432.0, "path": "/x",
 		"expected_status": 204.0, "interval_secs": 30.0, "timeout_secs": 3.0,
-		"healthy_threshold": 4.0, "unhealthy_threshold": 5.0, "enabled": false,
+		"healthy_threshold": 4.0, "unhealthy_threshold": 5.0, "enabled": false, "strict": true,
 	}
 	b := r.Obj()
 	for k, v := range want {
@@ -175,5 +175,20 @@ func TestFormatSecs(t *testing.T) {
 		if got := formatSecs(in); got != want {
 			t.Fatalf("formatSecs(%d) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestHealthCheckSetStrictDefaultsOffAndShows(t *testing.T) {
+	out, reqs, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) {
+		return 200, `{"uuid":"h1","record_uuid":"r1","name":"web","check_type":"ping","interval_secs":60,"timeout_secs":5,"enabled":true,"strict":true,"last_status":"unknown"}`
+	}, "hc", "set", "z1", "r1", "--name", "web", "--type", "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := cmdtest.Last(reqs).Obj()["strict"]; !ok || v != false {
+		t.Fatalf("strict not sent as false: %v", v)
+	}
+	if !strings.Contains(out, "Strict") {
+		t.Fatalf("missing Strict row in %s", out)
 	}
 }

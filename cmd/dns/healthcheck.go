@@ -61,6 +61,7 @@ type healthCheck struct {
 	HealthyThreshold   int                 `json:"healthy_threshold"`
 	UnhealthyThreshold int                 `json:"unhealthy_threshold"`
 	Enabled            bool                `json:"enabled"`
+	Strict             bool                `json:"strict"`
 	LastStatus         string              `json:"last_status"`
 	LastCheckAt        string              `json:"last_check_at"`
 	StatusSummary      *healthCheckSummary `json:"status_summary"`
@@ -256,7 +257,8 @@ Use "history" for uptime per location and past incidents.`,
 Every field is replaced: flags you leave out go back to their defaults.`,
 		Example: `  cubecli dns healthcheck set <zone_uuid> <record_uuid> --name web --type https --path /health
   cubecli dns hc set <zone_uuid> <record_uuid> --name db --type tcp --port 5432 --interval 30
-  cubecli dns hc set <zone_uuid> <record_uuid> --name web --type http --expected-status 204 --disabled`,
+  cubecli dns hc set <zone_uuid> <record_uuid> --name web --type http --expected-status 204 --disabled
+  cubecli dns hc set <zone_uuid> <record_uuid> --name db --type tcp --port 5432 --strict`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
@@ -285,6 +287,8 @@ Every field is replaced: flags you leave out go back to their defaults.`,
 			}
 			disabled, _ := cmd.Flags().GetBool("disabled")
 			body["enabled"] = !disabled
+			strict, _ := cmd.Flags().GetBool("strict")
+			body["strict"] = strict
 
 			s := output.NewSpinner("Saving health check...")
 			s.Start()
@@ -314,6 +318,7 @@ Every field is replaced: flags you leave out go back to their defaults.`,
 	setCmd.Flags().Int("timeout", 5, "Timeout in seconds (1-60, below the interval)")
 	setCmd.Flags().Int("healthy-threshold", 2, "Successes before healthy (1-10)")
 	setCmd.Flags().Int("unhealthy-threshold", 3, "Failures before unhealthy (1-10)")
+	setCmd.Flags().Bool("strict", false, "If every server fails, do not answer: serve only healthy records (default: answer with all of them)")
 	setCmd.Flags().Bool("disabled", false, "Save the check disabled (not billed, no failover)")
 	_ = setCmd.MarkFlagRequired("name")
 	_ = setCmd.MarkFlagRequired("type")
@@ -397,6 +402,7 @@ func renderHealthCheck(title string, resp json.RawMessage) error {
 	t.AddRow("Interval", fmt.Sprintf("%ds (timeout %ds)", h.IntervalSecs, h.TimeoutSecs))
 	t.AddRow("Thresholds", fmt.Sprintf("%d up, %d down", h.HealthyThreshold, h.UnhealthyThreshold))
 	t.AddRow("Enabled", cmdutil.YesNo(h.Enabled))
+	t.AddRow("Strict", cmdutil.YesNo(h.Strict))
 	t.AddRow("Status", h.status())
 	if s := h.StatusSummary; s != nil {
 		if len(s.PoPs) > 0 {
