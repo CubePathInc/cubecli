@@ -467,7 +467,7 @@ cubecli s3 events rule delete on-created-removed --bucket photos
 
 ### Managed Databases
 
-MySQL 8.4 today (PostgreSQL and Valkey are coming), alias `mdb`. Each instance is one dedicated server per node at `<id>.cubemdb.io`, reached over TLS. Plans are priced per node. With 3 nodes (`--replicas 3`: high availability with automatic failover) `<id>.cubemdb.io` always answers on the primary and `<id>-ro.cubemdb.io` (`read_host` in `show` and `credentials`) on the healthy replicas. Daily backups are always on: choose their hour (UTC) and retention (1-30 days).
+MySQL 8.4, PostgreSQL 17 and Valkey 8.1, alias `mdb`. Each instance is one dedicated server per node at `<id>.cubemdb.io`, reached over TLS. Plans are priced per node. With 3 nodes (`--replicas 3`: high availability with automatic failover) `<id>.cubemdb.io` always answers on the primary and `<id>-ro.cubemdb.io` (`read_host` in `show` and `credentials`) on the healthy replicas. Daily backups are always on: choose their hour (UTC) and retention (1-30 days).
 
 | Command | Description |
 |---------|-------------|

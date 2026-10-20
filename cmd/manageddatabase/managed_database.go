@@ -17,9 +17,9 @@ func NewCmd() *cobra.Command {
 	mdbCmd := &cobra.Command{
 		Use:     "managed-database",
 		Aliases: []string{"mdb", "dbaas"},
-		Short:   "Manage managed databases (MySQL; PostgreSQL and Valkey coming)",
-		Long: `Manage CubePath Managed Databases (MySQL today, PostgreSQL and Valkey are
-coming). Each node is a dedicated server reached over TLS at
+		Short:   "Manage managed databases (MySQL, PostgreSQL, Valkey)",
+		Long: `Manage CubePath Managed Databases (MySQL 8.4, PostgreSQL 17 and Valkey
+8.1). Each node is a dedicated server reached over TLS at
 <id>.cubemdb.io; plans are sized and priced per node. With 3 nodes (high
 availability, automatic failover) <id>.cubemdb.io always answers on the primary
 and <id>-ro.cubemdb.io on the replicas. Daily backups are always on: you
@@ -370,7 +370,9 @@ must allow it (see Max Replicas in 'managed-database plans'). Backups are always
 if omitted) and how many days they are kept with --backup-retention (1-30).`,
 		Example: `  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12
   cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --backup-hour 3 --backup-retention 14
-  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --replicas 3`,
+  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --replicas 3
+  cubecli mdb create --name app-pg --engine postgresql --version 17 --plan <plan_uuid> --project 12
+  cubecli mdb create --name app-cache --engine valkey --version 8.1 --plan <plan_uuid> --project 12`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
@@ -424,7 +426,7 @@ if omitted) and how many days they are kept with --backup-retention (1-30).`,
 	}
 	cmd.Flags().StringP("name", "n", "", "Name (lowercase letters, digits and hyphens)")
 	cmd.Flags().StringP("engine", "e", "", "Engine: mysql, postgresql or valkey")
-	cmd.Flags().String("version", "", "Engine version (MySQL: 8.4)")
+	cmd.Flags().String("version", "", "Engine version (MySQL: 8.4, PostgreSQL: 17, Valkey: 8.1)")
 	cmd.Flags().String("plan", "", "Plan UUID (see 'managed-database plans')")
 	cmd.Flags().IntP("project", "p", 0, "Project ID")
 	cmd.Flags().Int("replicas", 1, "Number of nodes: 1, or 3 for high availability with automatic failover")
