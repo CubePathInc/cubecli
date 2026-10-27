@@ -26,7 +26,7 @@ type LoginOptions struct {
 	// given issuer, or "". Empty, or unknown to the server, triggers a new
 	// registration.
 	LookupClient func(issuer string) string
-	// NoBrowser prints the URL instead of opening it, and asks for the URL the
+	// NoBrowser prints the authorization URL instead of opening it, and asks for the URL the
 	// browser ended up on. For machines without a browser (SSH sessions).
 	NoBrowser bool
 	In        io.Reader
@@ -89,24 +89,31 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	verifier, challenge := newPKCE()
 	state := randomString(16)
 
-	consentURL, err := startAuthorization(ctx, meta, pr.Resource, clientID, redirect, state, challenge)
+	err = preflight(ctx, meta, pr.Resource, clientID, redirect, state)
 	var oerr *Error
 	if errors.As(err, &oerr) && oerr.Code == "invalid_client" && storedClient != "" {
 		// The stored client no longer exists server side (pruned). Register again.
 		if err := register(); err != nil {
 			return nil, err
 		}
-		consentURL, err = startAuthorization(ctx, meta, pr.Resource, clientID, redirect, state, challenge)
+		err = preflight(ctx, meta, pr.Resource, clientID, redirect, state)
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	// The browser, not this process, calls the authorization endpoint: the server
+	// ties the pending consent request to the browser that opened it (RFC 8252).
+	authURL, err := authorizeURL(meta, pr.Resource, clientID, redirect, state, challenge)
 	if err != nil {
 		return nil, err
 	}
 
 	var code string
 	if opts.NoBrowser {
-		code, err = pasteCallback(ctx, opts, consentURL, state)
+		code, err = pasteCallback(ctx, opts, authURL, state)
 	} else {
-		code, err = browserCallback(ctx, opts, ln, consentURL, state)
+		code, err = browserCallback(ctx, opts, ln, authURL, state)
 	}
 	if err != nil {
 		return nil, err
@@ -119,56 +126,76 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	return &LoginResult{Meta: meta, Resource: pr.Resource, ClientID: clientID, Token: tok}, nil
 }
 
-// startAuthorization calls the authorization endpoint and returns the consent
-// page it redirects to, so an unknown client is detected here rather than in
-// the browser.
-func startAuthorization(ctx context.Context, meta *ServerMetadata, resource, clientID, redirect, state, challenge string) (string, error) {
-	q := url.Values{
-		"response_type":         {"code"},
-		"client_id":             {clientID},
-		"redirect_uri":          {redirect},
-		"state":                 {state},
-		"code_challenge":        {challenge},
-		"code_challenge_method": {"S256"},
-		"resource":              {resource},
+// authorizeURL builds the URL the user's browser opens: the authorization
+// endpoint with PKCE and every scope the server supports (the user picks on the
+// consent screen).
+func authorizeURL(meta *ServerMetadata, resource, clientID, redirect, state, challenge string) (string, error) {
+	q := authorizeQuery(meta, resource, clientID, redirect, state)
+	q.Set("code_challenge", challenge)
+	q.Set("code_challenge_method", "S256")
+	u := meta.AuthorizationEndpoint + "?" + q.Encode()
+	if err := requireSecureURL(u); err != nil {
+		return "", fmt.Errorf("refusing to open the authorization page: %w", err)
 	}
-	// Request every scope; the user picks on the consent screen.
+	return u, nil
+}
+
+func authorizeQuery(meta *ServerMetadata, resource, clientID, redirect, state string) url.Values {
+	q := url.Values{
+		"response_type": {"code"},
+		"client_id":     {clientID},
+		"redirect_uri":  {redirect},
+		"state":         {state},
+		"resource":      {resource},
+	}
 	if len(meta.ScopesSupported) > 0 {
 		q.Set("scope", strings.Join(meta.ScopesSupported, " "))
 	}
-	authURL := meta.AuthorizationEndpoint + "?" + q.Encode()
+	return q
+}
 
+// preflight checks that the client is still known to the server, so a pruned
+// client is detected here rather than in the browser. It calls the authorization
+// endpoint without a PKCE challenge on purpose: the server validates client_id
+// and redirect_uri first (answering JSON, no redirect, when they are wrong) and
+// then rejects the missing challenge with a redirect to our redirect URI, before
+// storing anything. A pending consent request is therefore never created here.
+func preflight(ctx context.Context, meta *ServerMetadata, resource, clientID, redirect, state string) error {
+	authURL := meta.AuthorizationEndpoint + "?" + authorizeQuery(meta, resource, clientID, redirect, state).Encode()
+	if err := requireSecureURL(authURL); err != nil {
+		return fmt.Errorf("refusing to use the authorization endpoint: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, authURL, nil)
 	if err != nil {
-		return "", err
+		return err
 	}
 	noRedirect := *httpClient
 	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, err := noRedirect.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("connection error: %w", err)
+		return fmt.Errorf("connection error: %w", err)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
 	if resp.StatusCode < 300 || resp.StatusCode >= 400 {
-		return "", parseError(resp.StatusCode, body)
+		return parseError(resp.StatusCode, body)
 	}
 	loc, err := resp.Location()
 	if err != nil {
-		return "", fmt.Errorf("authorization endpoint returned a redirect without location")
+		return fmt.Errorf("authorization endpoint returned a redirect without location")
 	}
 	// Errors after client validation come back as a redirect to our own URI.
 	if strings.HasPrefix(loc.String(), redirect) {
-		if code := loc.Query().Get("error"); code != "" {
-			return "", &Error{Code: code, Description: loc.Query().Get("error_description")}
+		code := loc.Query().Get("error")
+		if code == "invalid_request" {
+			return nil // the missing PKCE challenge: client and redirect URI are valid
 		}
-		return "", fmt.Errorf("unexpected redirect from the authorization endpoint")
+		if code != "" {
+			return &Error{Code: code, Description: loc.Query().Get("error_description")}
+		}
 	}
-	if err := requireSecureURL(loc.String()); err != nil {
-		return "", fmt.Errorf("refusing to open the consent page: %w", err)
-	}
-	return loc.String(), nil
+	return fmt.Errorf("unexpected answer from the authorization endpoint")
 }
 
 func listenLoopback() (net.Listener, int, error) {
@@ -187,7 +214,7 @@ type callbackResult struct {
 	err  error
 }
 
-func browserCallback(ctx context.Context, opts LoginOptions, ln net.Listener, consentURL, state string) (string, error) {
+func browserCallback(ctx context.Context, opts LoginOptions, ln net.Listener, authURL, state string) (string, error) {
 	results := make(chan callbackResult, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
@@ -211,8 +238,8 @@ func browserCallback(ctx context.Context, opts LoginOptions, ln net.Listener, co
 	}()
 
 	fmt.Fprintln(opts.Out, "Opening your browser to log in to CubePath...")
-	fmt.Fprintf(opts.Out, "If it does not open, visit:\n\n  %s\n\n", consentURL)
-	if err := openBrowser(consentURL); err != nil {
+	fmt.Fprintf(opts.Out, "If it does not open, visit:\n\n  %s\n\n", authURL)
+	if err := openBrowser(authURL); err != nil {
 		fmt.Fprintln(opts.Out, "Could not open a browser automatically.")
 	}
 	fmt.Fprintln(opts.Out, "Waiting for authorization...")
@@ -228,8 +255,8 @@ func browserCallback(ctx context.Context, opts LoginOptions, ln net.Listener, co
 	}
 }
 
-func pasteCallback(ctx context.Context, opts LoginOptions, consentURL, state string) (string, error) {
-	fmt.Fprintf(opts.Out, "Open this URL in a browser and approve the access:\n\n  %s\n\n", consentURL)
+func pasteCallback(ctx context.Context, opts LoginOptions, authURL, state string) (string, error) {
+	fmt.Fprintf(opts.Out, "Open this URL in a browser, sign in if asked and approve the access:\n\n  %s\n\n", authURL)
 	fmt.Fprintln(opts.Out, "The browser will then fail to load a 127.0.0.1 page. That is expected:")
 	fmt.Fprint(opts.Out, "copy the full URL from its address bar and paste it here: ")
 

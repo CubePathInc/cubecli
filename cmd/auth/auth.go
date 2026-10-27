@@ -47,6 +47,11 @@ cubecli login signs you in through the browser when the CubePath API supports
 it; otherwise it asks for an API token, which you create at
 https://my.cubepath.com/organization/tokens.
 
+Browser sign-in opens the CubePath authorization page in your browser and
+receives the result on a local 127.0.0.1 port. With '--no-browser' (SSH
+sessions, for example) it prints that URL instead: open it on any machine, then
+paste the 127.0.0.1 URL the browser ends up on.
+
 Each profile holds the credentials of one organization. Log in once per
 organization and switch with 'cubecli profile use' or '--profile'.
 
@@ -76,7 +81,7 @@ For CI and other non-interactive use, pass '--token' or set CUBE_API_TOKEN.`,
 	}
 	cmd.Flags().String("api-url", "", "API URL for this profile (kept from the existing profile if omitted)")
 	cmd.Flags().Bool("token", false, "Use an API token instead of the browser sign-in")
-	cmd.Flags().Bool("no-browser", false, "For browser sign-in, print the URL instead of opening a browser")
+	cmd.Flags().Bool("no-browser", false, "For browser sign-in, print the authorization URL instead of opening a browser")
 	cmd.Flags().Bool("use", false, "Make this the active profile")
 	cmd.Flags().Bool("skip-skills", false, "Do not offer to install the CubePath skills for AI agents")
 	cmd.Flags().Bool("skip-mcp", false, "Do not offer to add the CubePath MCP server to AI agents")
