@@ -329,7 +329,7 @@ take their uuid or name.
 | `cubecli objectstorage tiers` | Tiers with endpoint, prices and free tier |
 | `cubecli objectstorage bucket list\|get\|create\|update\|delete` | Bucket management (`create <name> --tier ia`, `delete --purge` also deletes the content) |
 | `cubecli objectstorage bucket object-lock set <bucket> --mode governance\|compliance --days N\|--years N` | Change the default retention of a bucket with Object Lock (`--remove` drops a governance rule) |
-| `cubecli objectstorage key list\|create\|delete` | Access keys; the secret is shown once (`create --bypass-governance` for keys that may delete governance versions) |
+| `cubecli objectstorage key list\|create\|update\|delete` | Access keys; the secret is shown once (`create --bypass-governance` for keys that may delete governance versions). `update` edits name, permission, buckets (`--bucket` or `--all-buckets`) and bypass in place; the key id and secret stay the same |
 | `cubecli objectstorage usage [--period YYYY-MM] [--tag k=v]` | Month usage and cost per tier and bucket |
 | `cubecli objectstorage presign <bucket>/<key> [--expires 1h]` | Temporary download link for one object, signed locally with your access key |
 | `cubecli objectstorage bucket metrics <bucket> [--range 24h] [--part storage,traffic,responses]` | Stored size, traffic and responses over 1h to 30d (needs an API token: GraphQL) |

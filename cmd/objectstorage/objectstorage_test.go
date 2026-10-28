@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -309,6 +310,58 @@ func TestBucketUpdate(t *testing.T) {
 	}
 	if _, _, err := run(t, "s3", "bucket", "update", bucketUUID); err == nil {
 		t.Fatal("expected an error without fields")
+	}
+}
+
+func TestKeyUpdateBodies(t *testing.T) {
+	cases := []struct {
+		args []string
+		want map[string]interface{}
+	}{
+		{[]string{"--name", "site"}, map[string]interface{}{"name": "site"}},
+		{[]string{"--permission", "read_only", "--bypass-governance=false"}, map[string]interface{}{"permission": "read_only", "bypass_governance": false}},
+		{[]string{"--bypass-governance"}, map[string]interface{}{"bypass_governance": true}},
+		{[]string{"--bucket", "photos", "--bucket", otherUUID}, map[string]interface{}{"bucket_uuids": []interface{}{bucketUUID, otherUUID}}},
+		{[]string{"--all-buckets"}, map[string]interface{}{"bucket_uuids": nil}},
+	}
+	for _, c := range cases {
+		_, reqs, err := run(t, append([]string{"s3", "key", "update", keyUUID}, c.args...)...)
+		if err != nil {
+			t.Fatalf("%v: %v", c.args, err)
+		}
+		req := last(reqs)
+		if req.Method != http.MethodPatch || req.Path != "/object-storage/keys/"+keyUUID {
+			t.Fatalf("%v: got %+v", c.args, req)
+		}
+		if !reflect.DeepEqual(req.Body, c.want) {
+			t.Fatalf("%v: body %v, want %v", c.args, req.Body, c.want)
+		}
+	}
+}
+
+func TestKeyUpdateByName(t *testing.T) {
+	_, reqs, err := run(t, "s3", "key", "update", "web", "--name", "site")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := last(reqs).Path; got != "/object-storage/keys/"+keyUUID {
+		t.Fatalf("path %s", got)
+	}
+}
+
+func TestKeyUpdateRejectsBadInput(t *testing.T) {
+	for _, args := range [][]string{
+		{},
+		{"--bucket", "photos", "--all-buckets"},
+		{"--permission", "admin"},
+	} {
+		_, reqs, err := run(t, append([]string{"s3", "key", "update", keyUUID}, args...)...)
+		if err == nil {
+			t.Fatalf("%v: expected an error", args)
+		}
+		if len(reqs) != 0 {
+			t.Fatalf("%v: requests sent: %+v", args, reqs)
+		}
 	}
 }
 

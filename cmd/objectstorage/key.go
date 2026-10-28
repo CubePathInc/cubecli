@@ -20,7 +20,7 @@ func keyCmd() *cobra.Command {
 		Aliases: []string{"keys", "access-key"},
 		Short:   "Manage access keys for S3 clients",
 	}
-	cmd.AddCommand(keyListCmd(), keyCreateCmd(), keyDeleteCmd())
+	cmd.AddCommand(keyListCmd(), keyCreateCmd(), keyUpdateCmd(), keyDeleteCmd())
 	return cmd
 }
 
@@ -122,7 +122,9 @@ present and future. --output prints ready-to-use credentials:
 
 --bypass-governance (read_write keys only) lets the key delete versions under
 governance retention in buckets with Object Lock, sending the
-x-amz-bypass-governance-retention header. It cannot be changed later.`,
+x-amz-bypass-governance-retention header. Name, permission, buckets and the
+bypass can be edited later with "key update"; the expiry, tier and project
+cannot.`,
 		Example: `  cubecli s3 key create --name backups --tier ia
   cubecli s3 key create --name web --tier ia --bucket photos --permission read_only --output env > .env.cubepath-storage
   cubecli s3 key create --name nightly --tier ia --expires-in 720h --output rclone >> ~/.config/rclone/rclone.conf`,
@@ -229,6 +231,91 @@ x-amz-bypass-governance-retention header. It cannot be changed later.`,
 	_ = cmd.MarkFlagRequired("name")
 	_ = cmd.MarkFlagRequired("tier")
 	cmd.MarkFlagsMutuallyExclusive("expires-at", "expires-in")
+	return cmd
+}
+
+// --- update ---
+
+func keyUpdateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update <key>",
+		Short: "Edit an access key's name, permission, buckets or governance bypass",
+		Long: `Edit an access key in place (uuid, access key ID or name). The access key ID and
+the secret do not change. Only the flags given are sent.
+
+--bucket limits the key to those buckets (replacing its current list);
+--all-buckets makes it reach every bucket of its project in its tier, present
+and future. A change of permission, buckets or bypass needs the key to be
+active and applies within a few seconds; the name can always be changed.
+
+--bypass-governance applies to read_write keys only: to turn a bypass key into
+read_only, give --permission read_only --bypass-governance=false. The expiry,
+tier and project are fixed when the key is created.`,
+		Example: `  cubecli s3 key update web --name website
+  cubecli s3 key update web --permission read_only
+  cubecli s3 key update web --bucket photos --bucket backups
+  cubecli s3 key update web --all-buckets
+  cubecli s3 key update nightly --bypass-governance=false`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := cmdutil.GetClient(cmd)
+
+			body := map[string]interface{}{}
+			if cmd.Flags().Changed("name") {
+				name, _ := cmd.Flags().GetString("name")
+				body["name"] = name
+			}
+			if cmd.Flags().Changed("permission") {
+				permission, _ := cmd.Flags().GetString("permission")
+				if permission != "read_write" && permission != "read_only" {
+					return fmt.Errorf("--permission must be read_write or read_only")
+				}
+				body["permission"] = permission
+			}
+			if cmd.Flags().Changed("bypass-governance") {
+				bypass, _ := cmd.Flags().GetBool("bypass-governance")
+				body["bypass_governance"] = bypass
+			}
+			buckets, _ := cmd.Flags().GetStringSlice("bucket")
+			allBuckets, _ := cmd.Flags().GetBool("all-buckets")
+			if allBuckets {
+				body["bucket_uuids"] = nil
+			}
+			if len(body) == 0 && len(buckets) == 0 {
+				return fmt.Errorf("at least one of --name, --permission, --bucket, --all-buckets or --bypass-governance must be specified")
+			}
+
+			s := output.NewSpinner("Updating access key...")
+			s.Start()
+			uuid, err := resolveKey(client, args[0])
+			if err == nil && len(buckets) > 0 {
+				var uuids []string
+				uuids, err = resolveBuckets(client, buckets)
+				body["bucket_uuids"] = uuids
+			}
+			var resp json.RawMessage
+			if err == nil {
+				resp, err = client.Patch("/object-storage/keys/"+uuid, body)
+			}
+			s.Stop()
+			if err != nil {
+				return err
+			}
+
+			if cmdutil.IsJSON(cmd) {
+				return output.PrintJSON(json.RawMessage(resp))
+			}
+
+			output.PrintSuccess("Access key updated")
+			return nil
+		},
+	}
+	cmd.Flags().StringP("name", "n", "", "New key name")
+	cmd.Flags().String("permission", "", "read_write or read_only")
+	cmd.Flags().StringSlice("bucket", nil, "Limit the key to these buckets (name or uuid, repeatable; replaces the current list)")
+	cmd.Flags().Bool("all-buckets", false, "Let the key reach every bucket of its project in its tier, present and future")
+	cmd.Flags().Bool("bypass-governance", false, "Allow deleting versions under governance retention (read_write keys only): --bypass-governance or --bypass-governance=false")
+	cmd.MarkFlagsMutuallyExclusive("bucket", "all-buckets")
 	return cmd
 }
 
