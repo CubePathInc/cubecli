@@ -198,7 +198,7 @@ not from cubecli.
 | `cubecli vps show <id>` | Show VPS details |
 | `cubecli vps destroy <id>` | Destroy a VPS instance |
 | `cubecli vps power start\|stop\|restart\|reset <id>` | Power management |
-| `cubecli vps resize <id>` | Resize a VPS |
+| `cubecli vps resize <id> --plan <name> [--grow-disk]` | Resize a VPS (CPU and RAM; the disk stays unless `--grow-disk`, which is permanent) |
 | `cubecli vps change-password <id>` | Change root password |
 | `cubecli vps reinstall <id>` | Reinstall OS |
 | `cubecli vps backup list\|create\|restore\|delete <id>` | Backup management |

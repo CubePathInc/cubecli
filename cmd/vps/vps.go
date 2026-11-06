@@ -289,6 +289,7 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 					Location struct {
 						Name string `json:"location_name"`
 					} `json:"location"`
+					DiskGB  *int   `json:"disk_gb"`
 					IPv4    string `json:"ipv4"`
 					IPv6    string `json:"ipv6"`
 					Network struct {
@@ -340,7 +341,7 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 					t2.AddRow("Plan", v.Plan.Name)
 					t2.AddRow("vCPUs", strconv.Itoa(v.Plan.VCPUs))
 					t2.AddRow("RAM", fmt.Sprintf("%d MB", v.Plan.RAM))
-					t2.AddRow("Storage", fmt.Sprintf("%d GB", v.Plan.Storage))
+					t2.AddRow("Storage", formatDisk(v.DiskGB, v.Plan.Storage))
 					t2.AddRow("Bandwidth", fmt.Sprintf("%d GB", v.Plan.Bandwidth))
 					t2.AddRow("IPv4", v.IPv4)
 					t2.AddRow("IPv6", v.IPv6)
@@ -462,7 +463,14 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 	vpsResizeCmd := &cobra.Command{
 		Use:   "resize <vps_id>",
 		Short: "Resize a VPS instance",
-		Args:  cobra.ExactArgs(1),
+		Long: `Move a VPS to another plan.
+
+Without --grow-disk only CPU and RAM change and the disk stays as it is, so
+the resize is reversible: you can go back to a smaller plan as long as its
+included disk still fits the current disk. With --grow-disk the disk also
+grows to the size the new plan includes. Growing the disk is permanent:
+disks never shrink.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 			vpsID, err := strconv.Atoi(args[0])
@@ -471,15 +479,24 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 			}
 
 			plan, _ := cmd.Flags().GetString("plan")
+			growDisk, _ := cmd.Flags().GetBool("grow-disk")
 
-			if !cmdutil.CheckForce(cmd, fmt.Sprintf("Are you sure you want to resize VPS %d to plan %s?", vpsID, plan)) {
+			prompt := fmt.Sprintf("Are you sure you want to resize VPS %d to plan %s? The disk stays as it is.", vpsID, plan)
+			if growDisk {
+				prompt = fmt.Sprintf("Are you sure you want to resize VPS %d to plan %s and grow its disk? Growing the disk cannot be undone.", vpsID, plan)
+			}
+			if !cmdutil.CheckForce(cmd, prompt) {
 				output.PrintInfo("Operation cancelled")
 				return nil
 			}
 
 			s := output.NewSpinner("Resizing VPS...")
 			s.Start()
-			resp, err := client.Post(fmt.Sprintf("/vps/resize/vps_id/%d/resize_plan/%s", vpsID, plan), nil)
+			resizePath := fmt.Sprintf("/vps/resize/vps_id/%d/resize_plan/%s", vpsID, plan)
+			if growDisk {
+				resizePath += "?grow_disk=true"
+			}
+			resp, err := client.Post(resizePath, nil)
 			s.Stop()
 			if err != nil {
 				return err
@@ -631,6 +648,7 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 
 	// vps resize flags
 	vpsResizeCmd.Flags().StringP("plan", "p", "", "New plan name")
+	vpsResizeCmd.Flags().Bool("grow-disk", false, "Also grow the disk to the new plan's size (permanent); without it only CPU and RAM change and the disk stays")
 	vpsResizeCmd.Flags().BoolP("force", "f", false, "Skip confirmation")
 	_ = vpsResizeCmd.MarkFlagRequired("plan")
 
@@ -700,4 +718,18 @@ func findVPSInProjects(resp json.RawMessage, vpsID int) (json.RawMessage, error)
 		}
 	}
 	return nil, fmt.Errorf("VPS %d not found", vpsID)
+}
+
+// formatDisk shows the real disk (disk_gb, the plan's storage when the API
+// does not send it) and, when it is smaller than the plan's, that the plan
+// includes more.
+func formatDisk(diskGB *int, planStorage int) string {
+	disk := planStorage
+	if diskGB != nil {
+		disk = *diskGB
+	}
+	if disk < planStorage {
+		return fmt.Sprintf("%d GB (plan includes %d GB)", disk, planStorage)
+	}
+	return fmt.Sprintf("%d GB", disk)
 }
