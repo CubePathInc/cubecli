@@ -56,6 +56,7 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 			cloudinit, _ := cmd.Flags().GetString("cloudinit")
 			availabilityGroup, _ := cmd.Flags().GetString("availability-group")
 			snapshot, _ := cmd.Flags().GetString("snapshot")
+			addons, _ := cmd.Flags().GetStringSlice("addon")
 
 			if err := validateImageFlags(template, snapshot, cloudinit); err != nil {
 				return err
@@ -105,6 +106,13 @@ source server. Up to 3 servers can deploy from one snapshot at the same time.`,
 			}
 			if availabilityGroup != "" {
 				body["availability_group_uuid"] = availabilityGroup
+			}
+			if len(addons) > 0 {
+				list := make([]map[string]interface{}, 0, len(addons))
+				for _, slug := range addons {
+					list = append(list, map[string]interface{}{"slug": slug, "quantity": 1})
+				}
+				body["addons"] = list
 			}
 
 			s := output.NewSpinner("Creating VPS...")
@@ -628,6 +636,7 @@ disks never shrink.`,
 	vpsCreateCmd.Flags().Bool("no-backups", false, "Disable backups")
 	vpsCreateCmd.Flags().StringP("cloudinit", "c", "", "Cloud-init configuration or file path")
 	vpsCreateCmd.Flags().String("availability-group", "", "UUID of the availability group to place the VPS in")
+	vpsCreateCmd.Flags().StringSlice("addon", nil, "Billing add-on to contract at deploy, by slug (repeatable), e.g. vps-port-10g")
 	_ = vpsCreateCmd.MarkFlagRequired("name")
 	_ = vpsCreateCmd.MarkFlagRequired("plan")
 	_ = vpsCreateCmd.MarkFlagRequired("project")

@@ -193,7 +193,7 @@ not from cubecli.
 
 | Command | Description |
 |---------|-------------|
-| `cubecli vps create` | Create a new VPS instance (`--template <name>` or `--snapshot <uuid>`) |
+| `cubecli vps create` | Create a new VPS instance (`--template <name>` or `--snapshot <uuid>`; `--addon vps-port-10g` for the 10 Gbps port, hourly projects in Barcelona, Houston and Miami) |
 | `cubecli vps list` | List all VPS instances |
 | `cubecli vps show <id>` | Show VPS details |
 | `cubecli vps destroy <id>` | Destroy a VPS instance |

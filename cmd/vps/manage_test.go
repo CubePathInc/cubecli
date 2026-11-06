@@ -82,3 +82,24 @@ func TestCreateImageFlags(t *testing.T) {
 		t.Fatalf("template deploy: got %s", cmdtest.Last(reqs).Raw)
 	}
 }
+
+func TestCreateSendsAddons(t *testing.T) {
+	base := []string{"create", "--name", "web", "--plan", "gp.small", "--project", "7", "--location", "eu-bcn-1", "--ssh", "3", "--template", "ubuntu-24"}
+
+	_, reqs, err := cmdtest.Run(t, NewCmd(), nil, append(base, "--addon", "vps-port-10g")...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(cmdtest.Last(reqs).Raw), `"addons":[{"quantity":1,"slug":"vps-port-10g"}]`) {
+		t.Fatalf("got %s", cmdtest.Last(reqs).Raw)
+	}
+
+	// no flag, no field: the API decides what an absent list means
+	_, reqs, err = cmdtest.Run(t, NewCmd(), nil, base...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(cmdtest.Last(reqs).Raw), "addons") {
+		t.Fatalf("got %s", cmdtest.Last(reqs).Raw)
+	}
+}
