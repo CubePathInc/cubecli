@@ -197,6 +197,7 @@ not from cubecli.
 | `cubecli vps list` | List all VPS instances |
 | `cubecli vps show <id>` | Show VPS details |
 | `cubecli vps destroy <id>` | Destroy a VPS instance |
+| `cubecli vps addon remove <id> <slug\|uuid>` | Remove a billing add-on, for example the 10 Gbps port (`vps-port-10g`). Billing stops at once |
 | `cubecli vps power start\|stop\|restart\|reset <id>` | Power management |
 | `cubecli vps resize <id> --plan <name> [--grow-disk]` | Resize a VPS (CPU and RAM; the disk stays unless `--grow-disk`, which is permanent) |
 | `cubecli vps change-password <id>` | Change root password |

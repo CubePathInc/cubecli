@@ -689,6 +689,7 @@ disks never shrink.`,
 	addBackupCmd(vpsCmd)
 	addISOCmd(vpsCmd)
 	addManageCmds(vpsCmd)
+	addAddonCmds(vpsCmd)
 
 	return vpsCmd
 }
