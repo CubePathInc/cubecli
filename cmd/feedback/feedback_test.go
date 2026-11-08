@@ -103,7 +103,9 @@ func TestValidationSendsNothing(t *testing.T) {
 		{"empty", "", nil, "empty"},
 		{"whitespace args", "", []string{"   ", "\t"}, "empty"},
 		{"whitespace stdin", " \n\r\n ", nil, "empty"},
-		{"too long by runes", "", []string{strings.Repeat("é", 5001)}, "too long"},
+		{"too long by runes", "", []string{strings.Repeat("é", 501)}, "too long"},
+		{"angle brackets", "", []string{"<script>alert(1)</script>"}, "cannot contain"},
+		{"angle bracket stdin", "a > b", nil, "cannot contain"},
 		{"control char", "", []string{"bad\x07bell"}, "control character"},
 		{"nul stdin", "a\x00b", nil, "control character"},
 	}
@@ -121,8 +123,8 @@ func TestValidationSendsNothing(t *testing.T) {
 }
 
 func TestLimitsAreInRunes(t *testing.T) {
-	if _, reqs, err := runFeedback(t, "", nil, strings.Repeat("é", 5000)); err != nil || len(reqs) != 1 {
-		t.Fatalf("5000 runes must pass: %v", err)
+	if _, reqs, err := runFeedback(t, "", nil, strings.Repeat("é", 500)); err != nil || len(reqs) != 1 {
+		t.Fatalf("500 runes must pass: %v", err)
 	}
 	if _, reqs, err := runFeedback(t, "", nil, "tab\tand\nnewline"); err != nil || len(reqs) != 1 {
 		t.Fatalf("tab and newline must pass: %v", err)

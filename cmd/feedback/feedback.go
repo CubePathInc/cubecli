@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/CubePathInc/cubecli/internal/api"
@@ -19,9 +18,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const maxMessageRunes = 5000
+const maxMessageRunes = 500
 
-// maxStdinBytes bounds what is read from a pipe: 5000 runes are at most 20000 bytes.
+// maxStdinBytes bounds what is read from a pipe, well above 500 runes (at most 2000 bytes),
+// so a longer file still gets the "too long" error instead of being cut silently.
 const maxStdinBytes = 64 * 1024
 
 var topics = []string{
@@ -40,7 +40,7 @@ CubePath team.
 
 The message is the words after the command. Without words, it is read from standard
 input: piped or redirected text is used as is, and in a terminal you are prompted
-for it. A message has 1 to 5000 characters.
+for it. A message has 1 to 500 characters and cannot contain < or >.
 
 --topic and --sentiment are optional and help the team route and weigh your message.
   topics:     ` + strings.Join(topics, ", ") + `
@@ -149,8 +149,8 @@ func readMessage(cmd *cobra.Command) (string, error) {
 	return string(data), nil
 }
 
-// validateMessage mirrors the server: trimmed, 1..5000 code points, no control
-// characters except tab and newline. CRLF is normalised to LF first.
+// validateMessage mirrors the server: trimmed, 1..500 code points, no ASCII control
+// characters except tab and newline, no angle brackets. CRLF is normalised to LF first.
 func validateMessage(raw string) (string, error) {
 	message := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(raw, "\r\n", "\n"), "\r", "\n"))
 	if message == "" {
@@ -160,8 +160,11 @@ func validateMessage(raw string) (string, error) {
 		return "", fmt.Errorf("the feedback message is too long: %d characters, the maximum is %d", n, maxMessageRunes)
 	}
 	for _, r := range message {
-		if r != '\t' && r != '\n' && unicode.IsControl(r) {
+		if (r < 0x20 && r != '\t' && r != '\n') || r == 0x7f {
 			return "", fmt.Errorf("the feedback message contains a control character (U+%04X)", r)
+		}
+		if r == '<' || r == '>' {
+			return "", errors.New("the feedback message cannot contain '<' or '>'")
 		}
 	}
 	return message, nil
