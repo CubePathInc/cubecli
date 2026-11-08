@@ -184,6 +184,18 @@ func TestProtectionAndPlans(t *testing.T) {
 	}
 }
 
+func TestPlansShowTheEngineVersions(t *testing.T) {
+	body := `[{"location_name":"eu-bcn-1","plans":[{"uuid":"plan-1","name":"mysql.micro","engine":"mysql","cpu":2,"memory_gb":4,
+"storage_gb":60,"max_replicas":3,"price_per_hour":0.02778,"versions":["9.7","8.4"]}]}]`
+	out, _, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) { return 200, body }, "plans")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "9.7, 8.4") || !strings.Contains(out, "Versions") {
+		t.Fatalf("the versions of the plan are not in the table:\n%s", out)
+	}
+}
+
 func TestShowHighAvailability(t *testing.T) {
 	body := `{"uuid":"md-1","project_id":12,"name":"app-db","engine":"mysql","version":"8.4","topology":"mgr","replicas":3,"status":"active",
 "endpoint_host":"abcd1234.cubemdb.io","read_host":"abcd1234-ro.cubemdb.io","endpoint_port":3306,

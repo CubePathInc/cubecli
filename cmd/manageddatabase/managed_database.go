@@ -18,8 +18,9 @@ func NewCmd() *cobra.Command {
 		Use:     "managed-database",
 		Aliases: []string{"mdb", "dbaas"},
 		Short:   "Manage managed databases (MySQL, PostgreSQL, Valkey)",
-		Long: `Manage CubePath Managed Databases (MySQL 8.4, PostgreSQL 17 and Valkey
-8.1). Each node is a dedicated server reached over TLS at
+		Long: `Manage CubePath Managed Databases (MySQL, PostgreSQL and Valkey; the versions
+each engine offers are listed by 'managed-database plans'). Each node is a
+dedicated server reached over TLS at
 <id>.cubemdb.io; plans are sized and priced per node. With 3 nodes (high
 availability, automatic failover) <id>.cubemdb.io always answers on the primary
 and <id>-ro.cubemdb.io on the replicas. Daily backups are always on: you
@@ -55,7 +56,7 @@ in the background: check progress with 'managed-database show'.`,
 func plansCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "plans",
-		Short: "List managed database plans (prices are per node per hour)",
+		Short: "List managed database plans and engine versions (prices are per node per hour)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
@@ -79,21 +80,22 @@ func plansCmd() *cobra.Command {
 			var locations []struct {
 				LocationName string `json:"location_name"`
 				Plans        []struct {
-					UUID         string  `json:"uuid"`
-					Name         string  `json:"name"`
-					Engine       string  `json:"engine"`
-					CPU          int     `json:"cpu"`
-					MemoryGB     float64 `json:"memory_gb"`
-					StorageGB    int     `json:"storage_gb"`
-					MaxReplicas  int     `json:"max_replicas"`
-					PricePerHour float64 `json:"price_per_hour"`
+					UUID         string   `json:"uuid"`
+					Name         string   `json:"name"`
+					Engine       string   `json:"engine"`
+					CPU          int      `json:"cpu"`
+					MemoryGB     float64  `json:"memory_gb"`
+					StorageGB    int      `json:"storage_gb"`
+					MaxReplicas  int      `json:"max_replicas"`
+					PricePerHour float64  `json:"price_per_hour"`
+					Versions     []string `json:"versions"`
 				} `json:"plans"`
 			}
 			if err := json.Unmarshal(resp, &locations); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("Managed Database Plans", []string{"Location", "Plan", "UUID", "Engine", "vCPU", "RAM (GB)", "Storage (GB)", "Max Replicas", "Price/Node/Hour"})
+			t := output.NewTable("Managed Database Plans", []string{"Location", "Plan", "UUID", "Engine", "Versions", "vCPU", "RAM (GB)", "Storage (GB)", "Max Replicas", "Price/Node/Hour"})
 			for _, loc := range locations {
 				for _, p := range loc.Plans {
 					t.AddRow(
@@ -101,6 +103,7 @@ func plansCmd() *cobra.Command {
 						p.Name,
 						p.UUID,
 						p.Engine,
+						strings.Join(p.Versions, ", "),
 						strconv.Itoa(p.CPU),
 						fmt.Sprintf("%g", p.MemoryGB),
 						strconv.Itoa(p.StorageGB),
@@ -362,16 +365,18 @@ func createCmd() *cobra.Command {
 		Long: `Create a managed database. The plan decides the location and the size of
 each node; see 'managed-database plans'. Provisioning takes several minutes.
 
-Only MySQL 8.4 can be created for now. --replicas 3 creates a high
+--version is one of the versions of the plan's engine, listed by
+'managed-database plans' (the newest first); the version never changes after
+creation. --replicas 3 creates a high
 availability database (3 nodes in different hypervisors, automatic failover,
 a read endpoint); each node is billed at the price of the plan, and the plan
 must allow it (see Max Replicas in 'managed-database plans'). Backups are always on: pick the hour
 (UTC, 0-23) of the daily backup with --backup-hour (an hour is chosen for you
 if omitted) and how many days they are kept with --backup-retention (1-30).`,
-		Example: `  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12
+		Example: `  cubecli mdb create --name app-db --engine mysql --version 9.7 --plan <plan_uuid> --project 12
   cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --backup-hour 3 --backup-retention 14
-  cubecli mdb create --name app-db --engine mysql --version 8.4 --plan <plan_uuid> --project 12 --replicas 3
-  cubecli mdb create --name app-pg --engine postgresql --version 17 --plan <plan_uuid> --project 12
+  cubecli mdb create --name app-db --engine mysql --version 9.7 --plan <plan_uuid> --project 12 --replicas 3
+  cubecli mdb create --name app-pg --engine postgresql --version 18 --plan <plan_uuid> --project 12
   cubecli mdb create --name app-cache --engine valkey --version 8.1 --plan <plan_uuid> --project 12`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
@@ -426,7 +431,7 @@ if omitted) and how many days they are kept with --backup-retention (1-30).`,
 	}
 	cmd.Flags().StringP("name", "n", "", "Name (lowercase letters, digits and hyphens)")
 	cmd.Flags().StringP("engine", "e", "", "Engine: mysql, postgresql or valkey")
-	cmd.Flags().String("version", "", "Engine version (MySQL: 8.4, PostgreSQL: 17, Valkey: 8.1)")
+	cmd.Flags().String("version", "", "Engine version, one of the plan's versions (see 'managed-database plans')")
 	cmd.Flags().String("plan", "", "Plan UUID (see 'managed-database plans')")
 	cmd.Flags().IntP("project", "p", 0, "Project ID")
 	cmd.Flags().Int("replicas", 1, "Number of nodes: 1, or 3 for high availability with automatic failover")
