@@ -82,3 +82,17 @@ func TestPostFileSendsMultipart(t *testing.T) {
 		t.Fatalf("out=%s ctype=%s field=%s name=%s content=%q", out, ctype, field, name, content)
 	}
 }
+
+func TestErrorKeepsRetryAfter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "1800")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"detail":"Too many requests"}`))
+	}))
+	defer srv.Close()
+	_, err := NewClient(srv.URL, "tok").Post("/feedback", map[string]string{"message": "x"})
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.StatusCode != 429 || apiErr.RetryAfter != "1800" || apiErr.Detail != "Too many requests" {
+		t.Fatalf("got %#v", err)
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/CubePathInc/cubecli/cmd/ddosattack"
 	"github.com/CubePathInc/cubecli/cmd/ddosmitigation"
 	"github.com/CubePathInc/cubecli/cmd/dns"
+	"github.com/CubePathInc/cubecli/cmd/feedback"
 	"github.com/CubePathInc/cubecli/cmd/firewall"
 	"github.com/CubePathInc/cubecli/cmd/floatingip"
 	"github.com/CubePathInc/cubecli/cmd/kubernetes"
@@ -126,5 +127,6 @@ func init() {
 		alert.NewCmd(),
 		skillscmd.NewCmd(),
 		mcpcmd.NewCmd(),
+		feedback.NewCmd(),
 	)
 }

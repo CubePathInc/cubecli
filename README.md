@@ -181,6 +181,7 @@ a profile called `default` the first time you run CubeCLI.
 | `cubecli org plan` | Organization plan (Free, Pro, Business, Enterprise): status, interval, price in USD, current period, renewal, scheduled change or cancellation, monthly credit and plan invoices. Read only |
 | `cubecli project list\|show\|create\|update\|delete` | Projects |
 | `cubecli ssh-key list\|create\|update\|delete` | SSH keys |
+| `cubecli feedback [message...]` | Send feedback to the CubePath team (`--topic`, `--sentiment`; the message can also be piped in) |
 
 `cubecli auth status` also shows the plan of the active profile's organization
 (`Free`, `Pro, renews 2026-11-01`, `Pro, ends 2026-11-01` when a cancellation is
@@ -188,6 +189,14 @@ scheduled). In `--json` the active profile carries the `plan` block of
 `/account/me` (`null` on Free). Plans are bought, changed, cancelled and
 resumed from the dashboard Plan page (https://my.cubepath.com/organization/plan),
 not from cubecli.
+
+Send feedback (3 per hour per IP address; the message is read from stdin when no words are given):
+
+```bash
+cubecli feedback "Creating a VPS from the CLI is great"
+cubecli feedback --topic billing --sentiment negative the invoice page is confusing
+echo "Please add a dark theme" | cubecli feedback --topic dashboard
+```
 
 ### Compute
 

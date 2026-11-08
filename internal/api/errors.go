@@ -10,6 +10,7 @@ import (
 type APIError struct {
 	StatusCode int
 	Detail     string
+	RetryAfter string // Retry-After header, when the server sent one
 }
 
 func (e *APIError) Error() string {
@@ -20,9 +21,10 @@ func (e *APIError) Error() string {
 }
 
 func parseErrorResponse(resp *http.Response) error {
+	retryAfter := resp.Header.Get("Retry-After")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return &APIError{StatusCode: resp.StatusCode}
+		return &APIError{StatusCode: resp.StatusCode, RetryAfter: retryAfter}
 	}
 
 	var result struct {
@@ -31,16 +33,16 @@ func parseErrorResponse(resp *http.Response) error {
 	if err := json.Unmarshal(body, &result); err == nil && result.Detail != nil {
 		switch v := result.Detail.(type) {
 		case string:
-			return &APIError{StatusCode: resp.StatusCode, Detail: v}
+			return &APIError{StatusCode: resp.StatusCode, Detail: v, RetryAfter: retryAfter}
 		default:
 			detailBytes, _ := json.Marshal(v)
-			return &APIError{StatusCode: resp.StatusCode, Detail: string(detailBytes)}
+			return &APIError{StatusCode: resp.StatusCode, Detail: string(detailBytes), RetryAfter: retryAfter}
 		}
 	}
 
 	if len(body) > 0 {
-		return &APIError{StatusCode: resp.StatusCode, Detail: string(body)}
+		return &APIError{StatusCode: resp.StatusCode, Detail: string(body), RetryAfter: retryAfter}
 	}
 
-	return &APIError{StatusCode: resp.StatusCode}
+	return &APIError{StatusCode: resp.StatusCode, RetryAfter: retryAfter}
 }
