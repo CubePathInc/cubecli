@@ -229,7 +229,7 @@ func getJSON(ctx context.Context, u string, out interface{}) error {
 
 func doJSON(req *http.Request, out interface{}) error {
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", fmt.Sprintf("CubeCLI/%s", version.Version))
+	req.Header.Set("User-Agent", version.UserAgent())
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("connection error: %w", err)

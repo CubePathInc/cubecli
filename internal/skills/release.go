@@ -193,7 +193,7 @@ func fetch(ctx context.Context, u string, limit int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", fmt.Sprintf("CubeCLI/%s", version.Version))
+	req.Header.Set("User-Agent", version.UserAgent())
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err

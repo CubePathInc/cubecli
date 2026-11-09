@@ -113,7 +113,7 @@ func (c *Client) send(method, path, contentType string, data []byte, token strin
 
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("User-Agent", fmt.Sprintf("CubeCLI/%s", version.Version))
+	req.Header.Set("User-Agent", version.UserAgent())
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
