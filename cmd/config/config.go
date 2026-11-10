@@ -19,7 +19,7 @@ func NewCmd() *cobra.Command {
 		Short: "Log in the 'default' profile (same as 'cubecli login default')",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			useToken, _ := cmd.Flags().GetBool("token")
-			noBrowser, _ := cmd.Flags().GetBool("no-browser")
+			noBrowser := authcmd.NoBrowser(cmd)
 			name := internalConfig.DefaultProfileName
 			if useToken || !cmdutil.StdinIsTerminal() {
 				return authcmd.TokenLogin(cmd, name, "", false)
@@ -28,7 +28,7 @@ func NewCmd() *cobra.Command {
 		},
 	}
 	configSetupCmd.Flags().Bool("token", false, "Store an API token instead of logging in with the browser")
-	configSetupCmd.Flags().Bool("no-browser", false, "Print the login URL instead of opening a browser")
+	configSetupCmd.Flags().Bool("no-browser", false, "Print the login URL instead of opening a browser (automatic over SSH or without a desktop)")
 
 	configShowCmd := &cobra.Command{
 		Use:   "show",

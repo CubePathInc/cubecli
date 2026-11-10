@@ -52,7 +52,7 @@ func newAddCmd() *cobra.Command {
 
 			apiURL, _ := cmd.Flags().GetString("api-url")
 			useToken, _ := cmd.Flags().GetBool("token")
-			noBrowser, _ := cmd.Flags().GetBool("no-browser")
+			noBrowser := authcmd.NoBrowser(cmd)
 			if useToken || !cmdutil.StdinIsTerminal() {
 				return authcmd.TokenLogin(cmd, name, apiURL, false)
 			}
@@ -61,7 +61,7 @@ func newAddCmd() *cobra.Command {
 	}
 	cmd.Flags().String("api-url", "", "Override API URL for this profile")
 	cmd.Flags().Bool("token", false, "Store an API token instead of logging in with the browser")
-	cmd.Flags().Bool("no-browser", false, "Print the login URL instead of opening a browser")
+	cmd.Flags().Bool("no-browser", false, "Print the login URL instead of opening a browser (automatic over SSH or without a desktop)")
 	cmd.Flags().BoolP("force", "f", false, "Replace profile without confirmation if it already exists")
 	return cmd
 }

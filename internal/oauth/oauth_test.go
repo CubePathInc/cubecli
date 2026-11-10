@@ -488,3 +488,70 @@ func TestPreflight(t *testing.T) {
 		})
 	}
 }
+
+func TestLoginAsksForTheURLWhenTheBrowserDoesNotStart(t *testing.T) {
+	f := newFakeServer(t)
+	openBrowser = func(string) error { return errors.New("exec: \"xdg-open\": executable file not found in $PATH") }
+	t.Cleanup(func() { openBrowser = func(string) error { return nil } })
+
+	out := &syncBuffer{}
+	pr, pw := ioPipe()
+	go func() {
+		for i := 0; i < 200; i++ {
+			if s := out.String(); strings.Contains(s, "paste it here") {
+				line := s[strings.Index(s, "http"):]
+				line = strings.TrimSpace(line[:strings.Index(line, "\n")])
+				resp := openAuthorizeNoFollow(t, line)
+				if resp == nil {
+					return
+				}
+				fmt.Fprintln(pw, resp.Header.Get("Location"))
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	res, err := Login(context.Background(), LoginOptions{APIURL: f.srv.URL, In: pr, Out: out})
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if res.Token.AccessToken == "" {
+		t.Fatal("no token")
+	}
+	if strings.Count(out.String(), "/oauth/authorize?") != 1 {
+		t.Errorf("the authorize URL should be printed once:\n%s", out.String())
+	}
+}
+
+func openAuthorizeNoFollow(t *testing.T, u string) *http.Response {
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := noFollow.Get(u)
+	if err != nil {
+		t.Error(err)
+		return nil
+	}
+	resp.Body.Close()
+	return resp
+}
+
+func TestHasLocalBrowser(t *testing.T) {
+	for name, tc := range map[string]struct {
+		goos string
+		env  map[string]string
+		want bool
+	}{
+		"mac desktop":       {"darwin", nil, true},
+		"mac over ssh":      {"darwin", map[string]string{"SSH_CONNECTION": "1.2.3.4 5 6.7.8.9 22"}, false},
+		"windows":           {"windows", nil, true},
+		"linux server":      {"linux", nil, false},
+		"linux x11":         {"linux", map[string]string{"DISPLAY": ":0"}, true},
+		"linux wayland":     {"linux", map[string]string{"WAYLAND_DISPLAY": "wayland-0"}, true},
+		"linux ssh with x":  {"linux", map[string]string{"DISPLAY": "localhost:10.0", "SSH_TTY": "/dev/pts/0"}, false},
+		"wsl":               {"linux", map[string]string{"WSL_DISTRO_NAME": "Ubuntu"}, true},
+		"freebsd no screen": {"freebsd", nil, false},
+	} {
+		if got := hasLocalBrowser(tc.goos, func(k string) string { return tc.env[k] }); got != tc.want {
+			t.Errorf("%s: got %v, want %v", name, got, tc.want)
+		}
+	}
+}

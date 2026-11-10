@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -27,7 +28,8 @@ type LoginOptions struct {
 	// registration.
 	LookupClient func(issuer string) string
 	// NoBrowser prints the authorization URL instead of opening it, and asks for the URL the
-	// browser ended up on. For machines without a browser (SSH sessions).
+	// browser ended up on. For machines without a browser (SSH sessions). The
+	// same happens on its own when the browser cannot be started.
 	NoBrowser bool
 	In        io.Reader
 	Out       io.Writer
@@ -237,11 +239,14 @@ func browserCallback(ctx context.Context, opts LoginOptions, ln net.Listener, au
 		_ = srv.Shutdown(shutdownCtx)
 	}()
 
+	if err := openBrowser(authURL); err != nil {
+		// Nothing here can show the page, so the redirect to this machine will
+		// never arrive: ask for the URL instead of waiting for it.
+		fmt.Fprintln(opts.Out, "Could not open a browser on this machine.")
+		return pasteCallback(ctx, opts, authURL, state)
+	}
 	fmt.Fprintln(opts.Out, "Opening your browser to log in to CubePath...")
 	fmt.Fprintf(opts.Out, "If it does not open, visit:\n\n  %s\n\n", authURL)
-	if err := openBrowser(authURL); err != nil {
-		fmt.Fprintln(opts.Out, "Could not open a browser automatically.")
-	}
 	fmt.Fprintln(opts.Out, "Waiting for authorization...")
 
 	select {
@@ -256,9 +261,12 @@ func browserCallback(ctx context.Context, opts LoginOptions, ln net.Listener, au
 }
 
 func pasteCallback(ctx context.Context, opts LoginOptions, authURL, state string) (string, error) {
-	fmt.Fprintf(opts.Out, "Open this URL in a browser, sign in if asked and approve the access:\n\n  %s\n\n", authURL)
+	fmt.Fprintf(opts.Out, "Open this URL in a browser on any device, sign in if asked and approve the access:\n\n  %s\n\n", authURL)
 	fmt.Fprintln(opts.Out, "The browser will then fail to load a 127.0.0.1 page. That is expected:")
 	fmt.Fprint(opts.Out, "copy the full URL from its address bar and paste it here: ")
+	if opts.In == nil {
+		return "", fmt.Errorf("no input to read the redirect URL from")
+	}
 
 	lines := make(chan string, 1)
 	go func() {
@@ -309,6 +317,26 @@ func writePage(w http.ResponseWriter, status int, title, msg string) {
 <style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0b0b0f;color:#e5e5e5}
 div{text-align:center;max-width:32rem;padding:1rem}h1{font-size:1.4rem}p{color:#a3a3a3}</style></head>
 <body><div><h1>%s</h1><p>%s</p></div></body></html>`, html.EscapeString(title), html.EscapeString(msg))
+}
+
+// HasLocalBrowser reports whether a browser opened by this process would be in
+// front of the user: not in an SSH session, and on Linux and the BSDs only with
+// a graphical session (WSL has none, but reaches the Windows browser).
+func HasLocalBrowser() bool {
+	return hasLocalBrowser(runtime.GOOS, os.Getenv)
+}
+
+func hasLocalBrowser(goos string, getenv func(string) string) bool {
+	for _, k := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		if getenv(k) != "" {
+			return false
+		}
+	}
+	switch goos {
+	case "darwin", "windows":
+		return true
+	}
+	return getenv("DISPLAY") != "" || getenv("WAYLAND_DISPLAY") != "" || getenv("WSL_DISTRO_NAME") != ""
 }
 
 // openBrowser is a variable so tests can replace it.
