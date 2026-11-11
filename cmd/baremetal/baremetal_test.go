@@ -39,7 +39,7 @@ func run(t *testing.T, graphql string, args ...string) ([]recorded, error) {
 		case r.URL.Path == "/graphql":
 			_, _ = w.Write([]byte(graphql))
 		case r.URL.Path == "/projects/":
-			_, _ = w.Write([]byte(`[{"project":{"id":1,"name":"p"},"baremetals":[{"id":9,"status":"deploying"},{"id":11,"uuid":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","status":"active"},{"id":"12","status":"active"}]}]`))
+			_, _ = w.Write([]byte(`[{"project":{"id":1,"name":"p"},"baremetals":[{"id":"` + deployingUUID + `","uuid":"` + deployingUUID + `","status":"deploying"},{"id":"` + testUUID + `","uuid":"` + testUUID + `","status":"active"}]}]`))
 		default:
 			_, _ = w.Write([]byte(`{"detail":"ok"}`))
 		}
@@ -62,51 +62,51 @@ func run(t *testing.T, graphql string, args ...string) ([]recorded, error) {
 }
 
 func TestSensorsReadsGraphQL(t *testing.T) {
-	reqs, err := run(t, `{"data":{"baremetal":{"sensors":{"ipmiAvailable":true,"powerOn":true,"lastSeen":100,"temperatures":[{"name":"CPU","value":41,"unit":"CELSIUS"}],"fans":[]}}}}`, "sensors", "9")
+	reqs, err := run(t, `{"data":{"baremetal":{"sensors":{"ipmiAvailable":true,"powerOn":true,"lastSeen":100,"temperatures":[{"name":"CPU","value":41,"unit":"CELSIUS"}],"fans":[]}}}}`, "sensors", testUUID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(reqs) != 1 || reqs[0].Method != http.MethodPost || reqs[0].Path != "/graphql" {
 		t.Fatalf("got %+v", reqs)
 	}
-	if vars, _ := reqs[0].Body["variables"].(map[string]interface{}); vars["id"] != "9" {
+	if vars, _ := reqs[0].Body["variables"].(map[string]interface{}); vars["id"] != testUUID {
 		t.Fatalf("body %v", reqs[0].Body)
 	}
 }
 
 func TestSensorsUnknownServer(t *testing.T) {
-	_, err := run(t, `{"data":{"baremetal":null},"errors":[{"message":"Resource not found.","extensions":{"code":"NOT_FOUND"}}]}`, "sensors", "9")
+	_, err := run(t, `{"data":{"baremetal":null},"errors":[{"message":"Resource not found.","extensions":{"code":"NOT_FOUND"}}]}`, "sensors", testUUID)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("got %v", err)
 	}
 }
 
 func TestSensorsOAuthLoginHint(t *testing.T) {
-	_, err := run(t, `{"data":{"baremetal":null},"errors":[{"message":"Authentication required: send the session cookie or an API token.","extensions":{"code":"UNAUTHENTICATED"}}]}`, "sensors", "9")
+	_, err := run(t, `{"data":{"baremetal":null},"errors":[{"message":"Authentication required: send the session cookie or an API token.","extensions":{"code":"UNAUTHENTICATED"}}]}`, "sensors", testUUID)
 	if err == nil || !strings.Contains(err.Error(), "CUBE_API_TOKEN") {
 		t.Fatalf("got %v", err)
 	}
 }
 
 func TestReinstallStatusFromServerStatus(t *testing.T) {
-	reqs, err := run(t, "", "reinstall", "status", "9")
+	reqs, err := run(t, "", "reinstall", "status", deployingUUID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(reqs) != 1 || reqs[0].Path != "/projects/" {
 		t.Fatalf("got %+v", reqs)
 	}
-	if _, err := run(t, "", "reinstall", "status", "10"); err == nil {
-		t.Fatal("want not found")
+	if _, err := run(t, "", "reinstall", "status", "aaaaaaaa-0000-4000-8000-000000000000"); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("want not found, got %v", err)
 	}
 }
 
 func TestReinstallCancel(t *testing.T) {
-	reqs, err := run(t, "", "reinstall", "cancel", "9", "--force")
+	reqs, err := run(t, "", "reinstall", "cancel", testUUID, "--force")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(reqs) != 1 || reqs[0].Method != http.MethodDelete || reqs[0].Path != "/baremetal/9/reinstall" {
+	if len(reqs) != 1 || reqs[0].Method != http.MethodDelete || reqs[0].Path != "/baremetal/"+testUUID+"/reinstall" {
 		t.Fatalf("got %+v", reqs)
 	}
 }

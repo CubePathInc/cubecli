@@ -17,7 +17,7 @@ func addReinstallCmd(parent *cobra.Command) {
 	}
 
 	reinstallStartCmd := &cobra.Command{
-		Use:   "start <id|uuid>",
+		Use:   "start <uuid>",
 		Short: "Start a baremetal server reinstallation",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -67,7 +67,7 @@ func addReinstallCmd(parent *cobra.Command) {
 	}
 
 	reinstallStatusCmd := &cobra.Command{
-		Use:   "status <id|uuid>",
+		Use:   "status <uuid>",
 		Short: "Check reinstallation status",
 		Long:  "Show whether an OS reinstallation is running: the server status is deploying while it runs.",
 		Args:  cobra.ExactArgs(1),
@@ -89,9 +89,8 @@ func addReinstallCmd(parent *cobra.Command) {
 
 			var projects []struct {
 				Baremetals []struct {
-					ID     bmref.FlexID `json:"id"`
-					UUID   string       `json:"uuid"`
-					Status string       `json:"status"`
+					ID     string `json:"id"`
+					Status string `json:"status"`
 				} `json:"baremetals"`
 			}
 			if err := json.Unmarshal(resp, &projects); err != nil {
@@ -100,7 +99,7 @@ func addReinstallCmd(parent *cobra.Command) {
 			status, found := "", false
 			for _, p := range projects {
 				for _, bm := range p.Baremetals {
-					if bmref.Matches(bmID, bm.ID, bm.UUID) {
+					if bmref.Matches(bmID, bm.ID) {
 						status, found = bm.Status, true
 					}
 				}
@@ -133,7 +132,7 @@ func addReinstallCmd(parent *cobra.Command) {
 	}
 
 	reinstallCancelCmd := &cobra.Command{
-		Use:   "cancel <id|uuid>",
+		Use:   "cancel <uuid>",
 		Short: "Cancel a pending or running reinstallation",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

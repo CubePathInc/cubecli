@@ -1,14 +1,9 @@
 package bmref
 
-import (
-	"encoding/json"
-	"testing"
-)
+import "testing"
 
 func TestParse(t *testing.T) {
 	ok := map[string]string{
-		"9":                                    "9",
-		"0123":                                 "0123",
 		"3F2504E0-4F89-41D3-9A0C-0305E82C3301": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
 		"3f2504e0-4f89-41d3-9a0c-0305e82c3301": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
 	}
@@ -18,56 +13,43 @@ func TestParse(t *testing.T) {
 			t.Errorf("Parse(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
-	for _, in := range []string{"", "abc", "-1", "1.5", " 9", "9/protection", "9?x=1", "3f2504e04f8941d39a0c0305e82c3301", "3f2504e0-4f89-41d3-9a0c-0305e82c330", "3f2504e0-4f89-41d3-9a0c-0305e82c33zz", "../9"} {
+	for _, in := range []string{"", "9", "0123", "abc", "-1", "1.5", " 9", "9/protection", "9?x=1", "3f2504e04f8941d39a0c0305e82c3301", "3f2504e0-4f89-41d3-9a0c-0305e82c330", "3f2504e0-4f89-41d3-9a0c-0305e82c33zz", "../9", " 3f2504e0-4f89-41d3-9a0c-0305e82c3301"} {
 		if got, err := Parse(in); err == nil {
 			t.Errorf("Parse(%q) = %q, want error", in, got)
 		}
 	}
 }
 
-func TestFlexID(t *testing.T) {
-	var v struct {
-		ID FlexID `json:"id"`
+func TestTarget(t *testing.T) {
+	u := "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+	if got, err := Target("baremetal", "3F2504E0-4F89-41D3-9A0C-0305E82C3301"); err != nil || got != u {
+		t.Errorf("baremetal uuid: %q %v", got, err)
 	}
-	for in, want := range map[string]string{`{"id":9}`: "9", `{"id":"9"}`: "9", `{"id":null}`: "", `{}`: "", `{"id":"3f2504e0-4f89-41d3-9a0c-0305e82c3301"}`: "3f2504e0-4f89-41d3-9a0c-0305e82c3301"} {
-		v.ID = ""
-		if err := json.Unmarshal([]byte(in), &v); err != nil || string(v.ID) != want {
-			t.Errorf("%s: got %q, %v; want %q", in, v.ID, err, want)
-		}
+	if _, err := Target("baremetal", "9"); err == nil {
+		t.Error("a baremetal number must be refused")
 	}
-	if err := json.Unmarshal([]byte(`{"id":true}`), &v); err == nil {
-		t.Error("a boolean id must fail")
+	if got, err := Target("vps", "9"); err != nil || got != "9" {
+		t.Errorf("a vps target must pass unchanged: %q %v", got, err)
 	}
-	b, _ := json.Marshal(struct {
-		ID FlexID `json:"id"`
-	}{"9"})
-	if string(b) != `{"id":9}` {
-		t.Errorf("a numeric id must print as a number, got %s", b)
+	if got, err := Target("ip", "10.0.0.5"); err != nil || got != "10.0.0.5" {
+		t.Errorf("an ip target must pass unchanged: %q %v", got, err)
 	}
 }
 
 func TestMatches(t *testing.T) {
 	u := "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
 	cases := []struct {
-		ref  string
-		id   FlexID
-		uuid string
-		want bool
+		ref, id string
+		want    bool
 	}{
-		{"9", "9", "", true},
-		{"9", "10", "", false},
-		{"009", "9", "", true}, // leading zeros, as in the route paths
-		{"9", "09", "", true},
-		{"00", "0", "", true},
-		{"09", "90", "", false},
-		{u, "9", u, true},
-		{u, "9", "", false}, // old API: no uuid to match
-		{u, "9", "other", false},
-		{"", "", "", false},
+		{u, u, true},
+		{u, "3F2504E0-4F89-41D3-9A0C-0305E82C3301", true},
+		{u, "other", false},
+		{"", "", false},
 	}
 	for _, c := range cases {
-		if got := Matches(c.ref, c.id, c.uuid); got != c.want {
-			t.Errorf("Matches(%q, %q, %q) = %v", c.ref, c.id, c.uuid, got)
+		if got := Matches(c.ref, c.id); got != c.want {
+			t.Errorf("Matches(%q, %q) = %v", c.ref, c.id, got)
 		}
 	}
 }

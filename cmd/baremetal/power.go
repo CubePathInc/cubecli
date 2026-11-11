@@ -17,7 +17,7 @@ func addPowerCmd(parent *cobra.Command) {
 	}
 
 	powerStartCmd := &cobra.Command{
-		Use:   "start <id|uuid>",
+		Use:   "start <uuid>",
 		Short: "Power on a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -46,7 +46,7 @@ func addPowerCmd(parent *cobra.Command) {
 	}
 
 	powerStopCmd := &cobra.Command{
-		Use:   "stop <id|uuid>",
+		Use:   "stop <uuid>",
 		Short: "Power off a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -75,7 +75,7 @@ func addPowerCmd(parent *cobra.Command) {
 	}
 
 	powerRestartCmd := &cobra.Command{
-		Use:   "restart <id|uuid>",
+		Use:   "restart <uuid>",
 		Short: "Restart a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

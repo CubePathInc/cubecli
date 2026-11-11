@@ -294,7 +294,7 @@ func NewCmd() *cobra.Command {
 	floatingIPReleaseCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
 	floatingIPAssignCmd.Flags().Int("vps", 0, "VPS ID to assign to")
-	floatingIPAssignCmd.Flags().String("baremetal", "", "Baremetal server to assign to (number or uuid)")
+	floatingIPAssignCmd.Flags().String("baremetal", "", "Baremetal server uuid to assign to")
 
 	floatingIPUnassignCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 

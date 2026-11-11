@@ -18,7 +18,7 @@ func addMonitoringCmd(parent *cobra.Command) {
 	}
 
 	monitoringEnableCmd := &cobra.Command{
-		Use:   "enable <id|uuid>",
+		Use:   "enable <uuid>",
 		Short: "Enable monitoring for a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -47,7 +47,7 @@ func addMonitoringCmd(parent *cobra.Command) {
 	}
 
 	monitoringDisableCmd := &cobra.Command{
-		Use:   "disable <id|uuid>",
+		Use:   "disable <uuid>",
 		Short: "Disable monitoring for a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -76,7 +76,7 @@ func addMonitoringCmd(parent *cobra.Command) {
 	}
 
 	monitoringStatusCmd := &cobra.Command{
-		Use:   "status <id|uuid>",
+		Use:   "status <uuid>",
 		Short: "Show monitoring status for a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -101,10 +101,9 @@ func addMonitoringCmd(parent *cobra.Command) {
 					Name string `json:"name"`
 				} `json:"project"`
 				Baremetals []struct {
-					ID               bmref.FlexID `json:"id"`
-					UUID             string       `json:"uuid"`
-					Hostname         string       `json:"hostname"`
-					MonitoringEnable bool         `json:"monitoring_enable"`
+					ID               string `json:"id"`
+					Hostname         string `json:"hostname"`
+					MonitoringEnable bool   `json:"monitoring_enable"`
 					FloatingIPs      []struct {
 						Type           string `json:"type"`
 						Address        string `json:"address"`
@@ -118,17 +117,13 @@ func addMonitoringCmd(parent *cobra.Command) {
 
 			for _, p := range projects {
 				for _, bm := range p.Baremetals {
-					if bmref.Matches(bmID, bm.ID, bm.UUID) {
+					if bmref.Matches(bmID, bm.ID) {
 						if cmdutil.IsJSON(cmd) {
-							out := map[string]interface{}{
+							return output.PrintJSON(map[string]interface{}{
 								"id":                bm.ID,
 								"hostname":          bm.Hostname,
 								"monitoring_enable": bm.MonitoringEnable,
-							}
-							if bm.UUID != "" {
-								out["uuid"] = bm.UUID
-							}
-							return output.PrintJSON(out)
+							})
 						}
 
 						status := "disabled"
@@ -142,10 +137,7 @@ func addMonitoringCmd(parent *cobra.Command) {
 						}
 
 						t := output.NewTable("Monitoring Status", []string{"Field", "Value"})
-						t.AddRow("ID", bm.ID.String())
-						if bm.UUID != "" {
-							t.AddRow("UUID", bm.UUID)
-						}
+						t.AddRow("ID", bm.ID)
 						t.AddRow("Hostname", bm.Hostname)
 						t.AddRow("IP Addresses", strings.Join(ips, ", "))
 						t.AddRow("Monitoring", output.FormatStatus(status))

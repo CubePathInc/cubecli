@@ -1,11 +1,9 @@
-// Package bmref handles the reference of a baremetal server: the number or the
-// uuid the API accepts in every /baremetal/{ref} route. It exists next to
-// cmdutil.IntPath, which VPS and networks keep using for plain numbers.
+// Package bmref handles the reference of a baremetal server: its uuid, which the
+// API returns as "id" and takes in every /baremetal/{uuid} route. It exists next
+// to cmdutil.IntPath, which VPS and networks keep using for plain numbers.
 package bmref
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -13,25 +11,29 @@ import (
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 )
 
-var (
-	numberRe = regexp.MustCompile(`^[0-9]+$`)
-	uuidRe   = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-)
+var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// Parse validates a server reference typed by the user: digits only (the
-// number) or a uuid (8-4-4-4-12 hex, any case). A number is returned as given
-// and a uuid in lower case. Anything else is an error before any request.
+// Parse validates a server reference typed by the user: a uuid (8-4-4-4-12 hex,
+// any case), returned in lower case. Anything else, a server number included, is
+// an error before any request.
 func Parse(arg string) (string, error) {
-	if numberRe.MatchString(arg) {
-		return arg, nil
-	}
 	if uuidRe.MatchString(arg) {
 		return strings.ToLower(arg), nil
 	}
-	return "", fmt.Errorf("invalid baremetal ID: %q (use the server number or its uuid)", arg)
+	return "", fmt.Errorf("invalid baremetal ID %q: baremetal reference must be a uuid", arg)
 }
 
-// Path returns a cmdutil.PathFunc for routes keyed by a server reference,
+// Target validates the target of a route, BGP peer, load balancer target or
+// alert when its type is baremetal, and returns it in lower case. Targets of
+// other types are returned as given.
+func Target(targetType, target string) (string, error) {
+	if !strings.EqualFold(targetType, "baremetal") {
+		return target, nil
+	}
+	return Parse(target)
+}
+
+// Path returns a cmdutil.PathFunc for routes keyed by a server uuid,
 // e.g. Path("/baremetal/%s/protection").
 func Path(format string) cmdutil.PathFunc {
 	return func(arg string) (string, error) {
@@ -43,62 +45,8 @@ func Path(format string) cmdutil.PathFunc {
 	}
 }
 
-// FlexID decodes the "id" of a server whether the API sends a number or a
-// string, and prints back as a number when it is one, so scripts reading
-// `jq '.id == 123'` keep working.
-type FlexID string
-
-func (f *FlexID) UnmarshalJSON(b []byte) error {
-	b = bytes.TrimSpace(b)
-	if string(b) == "null" {
-		*f = ""
-		return nil
-	}
-	if len(b) > 0 && b[0] == '"' {
-		var s string
-		if err := json.Unmarshal(b, &s); err != nil {
-			return err
-		}
-		*f = FlexID(s)
-		return nil
-	}
-	var n json.Number
-	if err := json.Unmarshal(b, &n); err != nil {
-		return err
-	}
-	*f = FlexID(n.String())
-	return nil
-}
-
-func (f FlexID) MarshalJSON() ([]byte, error) {
-	if numberRe.MatchString(string(f)) {
-		return []byte(f), nil
-	}
-	return json.Marshal(string(f))
-}
-
-func (f FlexID) String() string { return string(f) }
-
-// Matches reports whether a server with this id and uuid is the one the user
-// named. uuid is empty when the API does not send it yet.
-func Matches(ref string, id FlexID, uuid string) bool {
-	if ref == "" {
-		return false
-	}
-	if canonNumber(string(id)) == canonNumber(ref) {
-		return true
-	}
-	return uuid != "" && strings.EqualFold(uuid, ref)
-}
-
-// canonNumber drops the leading zeros of a digit string ("009" is server 9,
-// as in the route paths); anything else is returned unchanged.
-func canonNumber(s string) string {
-	if !numberRe.MatchString(s) {
-		return s
-	}
-	if t := strings.TrimLeft(s, "0"); t != "" {
-		return t
-	}
-	return "0"
+// Matches reports whether the server with this id (its uuid) is the one the
+// user named.
+func Matches(ref, id string) bool {
+	return ref != "" && strings.EqualFold(id, ref)
 }

@@ -15,13 +15,13 @@ func TestManageRoutes(t *testing.T) {
 		path   string
 		body   string
 	}{
-		{[]string{"ssh-key", "add", "9", "12"}, http.MethodPost, "/baremetal/9/ssh-keys", `[12]`},
-		{[]string{"ssh-key", "remove", "9", "12"}, http.MethodDelete, "/baremetal/9/ssh-keys/12", ""},
-		{[]string{"network", "attach", "9", "--network", "4"}, http.MethodPost, "/baremetal/9/network", `{"network_id":4}`},
-		{[]string{"network", "detach", "9", "--force"}, http.MethodDelete, "/baremetal/9/network", ""},
-		{[]string{"protection", "9", "--enable"}, http.MethodPost, "/baremetal/9/protection", `{"enabled":true}`},
-		{[]string{"move-project", "9", "--project", "7"}, http.MethodPost, "/baremetal/9/move-project", `{"project_id":7}`},
-		{[]string{"kvm", "9"}, http.MethodGet, "/baremetal/9/kvm", ""},
+		{[]string{"ssh-key", "add", testUUID, "12"}, http.MethodPost, "/baremetal/" + testUUID + "/ssh-keys", `[12]`},
+		{[]string{"ssh-key", "remove", testUUID, "12"}, http.MethodDelete, "/baremetal/" + testUUID + "/ssh-keys/12", ""},
+		{[]string{"network", "attach", testUUID, "--network", "4"}, http.MethodPost, "/baremetal/" + testUUID + "/network", `{"network_id":4}`},
+		{[]string{"network", "detach", testUUID, "--force"}, http.MethodDelete, "/baremetal/" + testUUID + "/network", ""},
+		{[]string{"protection", testUUID, "--enable"}, http.MethodPost, "/baremetal/" + testUUID + "/protection", `{"enabled":true}`},
+		{[]string{"move-project", testUUID, "--project", "7"}, http.MethodPost, "/baremetal/" + testUUID + "/move-project", `{"project_id":7}`},
+		{[]string{"kvm", testUUID}, http.MethodGet, "/baremetal/" + testUUID + "/kvm", ""},
 	}
 	for _, c := range cases {
 		_, reqs, err := cmdtest.Run(t, NewCmd(), nil, c.args...)
@@ -38,11 +38,11 @@ func TestManageRoutes(t *testing.T) {
 func TestOSAndModels(t *testing.T) {
 	out, reqs, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) {
 		return 200, `[{"id":1,"os_name":"ubuntu-24","operating_system":"Ubuntu 24.04","disk_layouts":[{"disk_layout_name":"raid1","raid_type":"RAID1","disk_type":"NVME","disk_count":2}]}]`
-	}, "os", "9")
+	}, "os", testUUID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdtest.Last(reqs).Path != "/baremetal/os/9" || !strings.Contains(out, "raid1") {
+	if cmdtest.Last(reqs).Path != "/baremetal/os/"+testUUID || !strings.Contains(out, "raid1") {
 		t.Fatalf("got %s %s", cmdtest.Last(reqs).Path, out)
 	}
 

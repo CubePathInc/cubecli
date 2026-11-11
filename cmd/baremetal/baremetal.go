@@ -18,11 +18,11 @@ import (
 func NewCmd() *cobra.Command {
 	baremetalCmd := &cobra.Command{
 		Use:   "baremetal",
-		Short: "Manage baremetal servers (a server is named by its number or its uuid)",
+		Short: "Manage baremetal servers (a server is named by its uuid)",
 		Long: `Manage baremetal servers.
 
-Wherever a command takes a server <id|uuid>, give either the server number
-(digits only, as shown in the ID column) or its uuid (8-4-4-4-12 hex).`,
+Wherever a command takes a server <uuid>, give the uuid shown in the ID column
+of "cubecli baremetal list" (8-4-4-4-12 hex). Server numbers are not accepted.`,
 	}
 
 	baremetalDeployCmd := &cobra.Command{
@@ -106,10 +106,9 @@ Wherever a command takes a server <id|uuid>, give either the server number
 					Name string `json:"name"`
 				} `json:"project"`
 				Baremetals []struct {
-					ID          bmref.FlexID `json:"id"`
-					UUID        string       `json:"uuid"`
-					Hostname    string       `json:"hostname"`
-					Status      string       `json:"status"`
+					ID          string `json:"id"`
+					Hostname    string `json:"hostname"`
+					Status      string `json:"status"`
 					FloatingIPs []struct {
 						Type           string `json:"type"`
 						Address        string `json:"address"`
@@ -162,7 +161,7 @@ Wherever a command takes a server <id|uuid>, give either the server number
 						privateIP = privateIP[:i]
 					}
 					t.AddRow(
-						bm.ID.String(),
+						bm.ID,
 						bm.Hostname,
 						p.Project.Name,
 						output.FormatStatus(bm.Status),
@@ -181,7 +180,7 @@ Wherever a command takes a server <id|uuid>, give either the server number
 	}
 
 	baremetalShowCmd := &cobra.Command{
-		Use:   "show <id|uuid>",
+		Use:   "show <uuid>",
 		Short: "Show baremetal server details",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -206,11 +205,11 @@ Wherever a command takes a server <id|uuid>, give either the server number
 					Name string `json:"name"`
 				} `json:"project"`
 				Baremetals []struct {
-					ID          bmref.FlexID `json:"id"`
-					UUID        string       `json:"uuid,omitempty"`
-					Hostname    string       `json:"hostname"`
-					Status      string       `json:"status"`
-					Label       string       `json:"label"`
+					ID          string `json:"id"`
+					UUID        string `json:"uuid,omitempty"`
+					Hostname    string `json:"hostname"`
+					Status      string `json:"status"`
+					Label       string `json:"label"`
 					FloatingIPs []struct {
 						Type           string `json:"type"`
 						Address        string `json:"address"`
@@ -248,7 +247,7 @@ Wherever a command takes a server <id|uuid>, give either the server number
 
 			for _, p := range projects {
 				for _, bm := range p.Baremetals {
-					if bmref.Matches(bmID, bm.ID, bm.UUID) {
+					if bmref.Matches(bmID, bm.ID) {
 						if cmdutil.IsJSON(cmd) {
 							return output.PrintJSON(bm)
 						}
@@ -260,10 +259,7 @@ Wherever a command takes a server <id|uuid>, give either the server number
 
 						// Basic Info
 						basic := output.NewTable("Basic Info", []string{"Field", "Value"})
-						basic.AddRow("ID", bm.ID.String())
-						if bm.UUID != "" {
-							basic.AddRow("UUID", bm.UUID)
-						}
+						basic.AddRow("ID", bm.ID)
 						basic.AddRow("Hostname", bm.Hostname)
 						basic.AddRow("Project", p.Project.Name)
 						basic.AddRow("Status", output.FormatStatus(bm.Status))
@@ -305,7 +301,7 @@ Wherever a command takes a server <id|uuid>, give either the server number
 	}
 
 	baremetalSensorsCmd := &cobra.Command{
-		Use:   "sensors <id|uuid>",
+		Use:   "sensors <uuid>",
 		Short: "Show BMC sensor data for a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -413,7 +409,7 @@ Wherever a command takes a server <id|uuid>, give either the server number
 	}
 
 	baremetalRescueCmd := &cobra.Command{
-		Use:   "rescue <id|uuid>",
+		Use:   "rescue <uuid>",
 		Short: "Boot baremetal server into rescue mode",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -457,7 +453,7 @@ Wherever a command takes a server <id|uuid>, give either the server number
 	}
 
 	baremetalResetBMCCmd := &cobra.Command{
-		Use:   "reset-bmc <id|uuid>",
+		Use:   "reset-bmc <uuid>",
 		Short: "Reset the BMC of a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -491,7 +487,7 @@ Wherever a command takes a server <id|uuid>, give either the server number
 	}
 
 	baremetalUpdateCmd := &cobra.Command{
-		Use:   "update <id|uuid>",
+		Use:   "update <uuid>",
 		Short: "Update a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -534,7 +530,7 @@ Wherever a command takes a server <id|uuid>, give either the server number
 	}
 
 	baremetalIPMICmd := &cobra.Command{
-		Use:   "ipmi <id|uuid>",
+		Use:   "ipmi <uuid>",
 		Short: "Create an IPMI proxy session",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

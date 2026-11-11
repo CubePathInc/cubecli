@@ -15,8 +15,8 @@ import (
 // network, the KVM console and the OS catalog of a server.
 func addManageCmds(parent *cobra.Command) {
 	parent.AddCommand(
-		cmdutil.ProtectionCmd("id|uuid", "Baremetal", bmref.Path("/baremetal/%s/protection")),
-		cmdutil.MoveProjectCmd("id|uuid", "baremetal server", bmref.Path("/baremetal/%s/move-project")),
+		cmdutil.ProtectionCmd("uuid", "Baremetal", bmref.Path("/baremetal/%s/protection")),
+		cmdutil.MoveProjectCmd("uuid", "baremetal server", bmref.Path("/baremetal/%s/move-project")),
 		sshKeyCmd(),
 		networkCmd(),
 		kvmCmd(),
@@ -31,7 +31,7 @@ func sshKeyCmd() *cobra.Command {
 	}
 
 	addCmd := &cobra.Command{
-		Use:   "add <id|uuid> <ssh_key_id>...",
+		Use:   "add <uuid> <ssh_key_id>...",
 		Short: "Add SSH keys to a server (used by the next install)",
 		Args:  cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -55,7 +55,7 @@ func sshKeyCmd() *cobra.Command {
 	}
 
 	removeCmd := &cobra.Command{
-		Use:   "remove <id|uuid> <ssh_key_id>",
+		Use:   "remove <uuid> <ssh_key_id>",
 		Short: "Remove an SSH key from a server",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -85,7 +85,7 @@ func networkCmd() *cobra.Command {
 	}
 
 	attachCmd := &cobra.Command{
-		Use:   "attach <id|uuid>",
+		Use:   "attach <uuid>",
 		Short: "Attach a server to a private network in its location",
 		Long: `Attach a baremetal server to a private network. An address is picked
 automatically; restart the server to apply the change.`,
@@ -106,7 +106,7 @@ automatically; restart the server to apply the change.`,
 	_ = attachCmd.MarkFlagRequired("network")
 
 	detachCmd := &cobra.Command{
-		Use:   "detach <id|uuid>",
+		Use:   "detach <uuid>",
 		Short: "Detach a server from its private network",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -132,7 +132,7 @@ automatically; restart the server to apply the change.`,
 
 func kvmCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "kvm <id|uuid>",
+		Use:   "kvm <uuid>",
 		Short: "Show the KVM console URL and credentials of a server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -178,7 +178,7 @@ func kvmCmd() *cobra.Command {
 
 func osCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "os <id|uuid>",
+		Use:   "os <uuid>",
 		Short: "List the operating systems and disk layouts a server can be installed with",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
