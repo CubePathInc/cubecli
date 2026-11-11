@@ -285,7 +285,7 @@ func createCmd() *cobra.Command {
 	cmd.Flags().StringP("name", "n", "", "Alert name")
 	cmd.Flags().String("description", "", "Description")
 	cmd.Flags().String("target-type", "vps", "Target type: vps, baremetal or availability-group")
-	cmd.Flags().String("target", "", "Target: VPS or baremetal id, or availability group UUID")
+	cmd.Flags().String("target", "", "Target: VPS ID, baremetal server number (not its uuid), or availability group UUID")
 	cmd.Flags().String("metric", "", "Metric: cpu, ram, disk, network_in, network_out")
 	cmd.Flags().String("operator", "gt", "Operator: gt, lt, gte, lte, eq")
 	cmd.Flags().Float64("threshold", 0, "Threshold value")

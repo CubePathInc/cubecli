@@ -145,7 +145,7 @@ Prefixes the router announces become routes of the network. Max 8 per network.`,
 		},
 	}
 	createCmd.Flags().String("type", "", "Peer type: vps, baremetal or ip")
-	createCmd.Flags().String("target", "", "VPS ID, baremetal ID or IP inside the network")
+	createCmd.Flags().String("target", "", "VPS ID, baremetal server number (not its uuid) or IP inside the network")
 	createCmd.Flags().Int64("remote-asn", 0, "ASN of your router (not 64512)")
 	createCmd.Flags().Int("max-prefix", 100, "Maximum prefixes accepted (1-1000)")
 	createCmd.Flags().String("description", "", "Description")

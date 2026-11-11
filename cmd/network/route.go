@@ -154,7 +154,7 @@ func addRouteCmd(parent *cobra.Command) {
 
 	routeCreateCmd.Flags().StringP("destination", "d", "", "Destination CIDR (e.g. 0.0.0.0/0)")
 	routeCreateCmd.Flags().StringP("next-hop-type", "t", "", "Next hop type (ip, vps, baremetal)")
-	routeCreateCmd.Flags().StringP("next-hop-target", "g", "", "Next hop target (IP address, or numeric VPS/baremetal ID)")
+	routeCreateCmd.Flags().StringP("next-hop-target", "g", "", "Next hop target (IP address, or VPS/baremetal server number, not its uuid)")
 	routeCreateCmd.Flags().String("description", "", "Optional description")
 	routeCreateCmd.MarkFlagRequired("destination")
 	routeCreateCmd.MarkFlagRequired("next-hop-type")
