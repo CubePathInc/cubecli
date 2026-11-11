@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -240,6 +241,10 @@ func createCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			target, err = bmref.Target(normalizeTargetType(targetType), target)
+			if err != nil {
+				return err
+			}
 
 			body := map[string]interface{}{
 				"project_id":  projectID,
@@ -285,7 +290,7 @@ func createCmd() *cobra.Command {
 	cmd.Flags().StringP("name", "n", "", "Alert name")
 	cmd.Flags().String("description", "", "Description")
 	cmd.Flags().String("target-type", "vps", "Target type: vps, baremetal or availability-group")
-	cmd.Flags().String("target", "", "Target: VPS ID, baremetal server number (not its uuid), or availability group UUID")
+	cmd.Flags().String("target", "", "Target: VPS ID, baremetal server uuid or availability group UUID")
 	cmd.Flags().String("metric", "", "Metric: cpu, ram, disk, network_in, network_out")
 	cmd.Flags().String("operator", "gt", "Operator: gt, lt, gte, lte, eq")
 	cmd.Flags().Float64("threshold", 0, "Threshold value")
@@ -322,6 +327,13 @@ func updateCmd() *cobra.Command {
 			if cmd.Flags().Changed("target-type") {
 				v, _ := cmd.Flags().GetString("target-type")
 				body["target_type"] = normalizeTargetType(v)
+				if target, ok := body["target_id"].(string); ok {
+					ref, err := bmref.Target(normalizeTargetType(v), target)
+					if err != nil {
+						return err
+					}
+					body["target_id"] = ref
+				}
 			}
 			if cmd.Flags().Changed("operator") {
 				v, _ := cmd.Flags().GetString("operator")

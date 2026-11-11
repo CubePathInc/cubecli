@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -28,6 +29,10 @@ func addTargetCmd(parent *cobra.Command) {
 			targetUUID, _ := cmd.Flags().GetString("target")
 			port, _ := cmd.Flags().GetInt("port")
 			weight, _ := cmd.Flags().GetInt("weight")
+			targetUUID, err := bmref.Target(targetType, targetUUID)
+			if err != nil {
+				return err
+			}
 
 			body := map[string]interface{}{
 				"target_type": targetType,
@@ -169,7 +174,7 @@ func addTargetCmd(parent *cobra.Command) {
 
 	// Flags for add
 	targetAddCmd.Flags().StringP("type", "t", "", "Target type (vps, baremetal, availability_group)")
-	targetAddCmd.Flags().String("target", "", "Target UUID")
+	targetAddCmd.Flags().String("target", "", "Target: VPS ID, baremetal server uuid or availability group UUID")
 	targetAddCmd.Flags().IntP("port", "p", 0, "Target port")
 	targetAddCmd.Flags().IntP("weight", "w", 100, "Target weight (1-100)")
 	targetAddCmd.MarkFlagRequired("type")

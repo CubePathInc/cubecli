@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -91,6 +92,10 @@ func addRouteCmd(parent *cobra.Command) {
 			nextHopType, _ := cmd.Flags().GetString("next-hop-type")
 			nextHopTarget, _ := cmd.Flags().GetString("next-hop-target")
 			description, _ := cmd.Flags().GetString("description")
+			nextHopTarget, err = bmref.Target(nextHopType, nextHopTarget)
+			if err != nil {
+				return err
+			}
 
 			body := map[string]interface{}{
 				"destination":     destination,
@@ -154,7 +159,7 @@ func addRouteCmd(parent *cobra.Command) {
 
 	routeCreateCmd.Flags().StringP("destination", "d", "", "Destination CIDR (e.g. 0.0.0.0/0)")
 	routeCreateCmd.Flags().StringP("next-hop-type", "t", "", "Next hop type (ip, vps, baremetal)")
-	routeCreateCmd.Flags().StringP("next-hop-target", "g", "", "Next hop target (IP address, or VPS/baremetal server number, not its uuid)")
+	routeCreateCmd.Flags().StringP("next-hop-target", "g", "", "Next hop target (IP address, VPS ID or baremetal server uuid)")
 	routeCreateCmd.Flags().String("description", "", "Optional description")
 	routeCreateCmd.MarkFlagRequired("destination")
 	routeCreateCmd.MarkFlagRequired("next-hop-type")

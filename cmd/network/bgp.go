@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -107,6 +108,10 @@ Prefixes the router announces become routes of the network. Max 8 per network.`,
 
 			peerType, _ := cmd.Flags().GetString("type")
 			target, _ := cmd.Flags().GetString("target")
+			target, err = bmref.Target(peerType, target)
+			if err != nil {
+				return err
+			}
 			asn, _ := cmd.Flags().GetInt64("remote-asn")
 			body := map[string]interface{}{
 				"peer_type":   peerType,
@@ -145,7 +150,7 @@ Prefixes the router announces become routes of the network. Max 8 per network.`,
 		},
 	}
 	createCmd.Flags().String("type", "", "Peer type: vps, baremetal or ip")
-	createCmd.Flags().String("target", "", "VPS ID, baremetal server number (not its uuid) or IP inside the network")
+	createCmd.Flags().String("target", "", "VPS ID, baremetal server uuid or IP inside the network")
 	createCmd.Flags().Int64("remote-asn", 0, "ASN of your router (not 64512)")
 	createCmd.Flags().Int("max-prefix", 100, "Maximum prefixes accepted (1-1000)")
 	createCmd.Flags().String("description", "", "Description")

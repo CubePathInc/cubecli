@@ -91,3 +91,24 @@ func TestHistoryAndDelete(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 }
+
+// A baremetal target is the server uuid, sent in lower case; a number is refused
+// before any request, on create and on update when the type changes.
+func TestBaremetalTargetIsUUID(t *testing.T) {
+	const u = "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+	ok := func(m, p string) (int, string) { return 201, alertJSON }
+	base := []string{"create", "--project", "12", "--name", "net", "--target-type", "baremetal", "--metric", "network_in", "--threshold", "90", "--notify", "n1"}
+	_, reqs, err := cmdtest.Run(t, NewCmd(), ok, append(base, "--target", "3F2504E0-4F89-41D3-9A0C-0305E82C3301")...)
+	if err != nil || cmdtest.Last(reqs).Obj()["target_id"] != u {
+		t.Fatalf("create: %v %v", err, cmdtest.Last(reqs).Obj())
+	}
+	for _, args := range [][]string{
+		append(base, "--target", "12"),
+		{"update", "a1", "--target-type", "baremetal", "--target", "12"},
+	} {
+		_, reqs, err := cmdtest.Run(t, NewCmd(), ok, args...)
+		if err == nil || len(reqs) != 0 {
+			t.Fatalf("%v: got %v, %d requests", args, err, len(reqs))
+		}
+	}
+}

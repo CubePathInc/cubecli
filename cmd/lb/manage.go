@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -25,9 +26,14 @@ func parseBatchTarget(spec string) (map[string]interface{}, error) {
 	if len(parts) < 2 || len(parts) > 4 || parts[0] == "" || parts[1] == "" {
 		return nil, fmt.Errorf("invalid target %q: expected <type>:<id>[:port[:weight]]", spec)
 	}
+	targetType := strings.ReplaceAll(strings.ToLower(parts[0]), "-", "_")
+	target, err := bmref.Target(targetType, parts[1])
+	if err != nil {
+		return nil, err
+	}
 	t := map[string]interface{}{
-		"target_type": strings.ReplaceAll(strings.ToLower(parts[0]), "-", "_"),
-		"target_uuid": parts[1],
+		"target_type": targetType,
+		"target_uuid": target,
 	}
 	if len(parts) > 2 && parts[2] != "" {
 		port, err := strconv.Atoi(parts[2])
@@ -67,6 +73,16 @@ baremetal or availability_group, or pass a JSON array with --file.`,
 			if file != "" {
 				if err := cmdutil.ReadJSONFile(file, &targets); err != nil {
 					return err
+				}
+				for _, t := range targets {
+					if typ, _ := t["target_type"].(string); strings.EqualFold(typ, "baremetal") {
+						target, _ := t["target_uuid"].(string)
+						ref, err := bmref.Target(typ, target)
+						if err != nil {
+							return err
+						}
+						t["target_uuid"] = ref
+					}
 				}
 			}
 			for _, spec := range specs {

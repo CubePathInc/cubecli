@@ -47,3 +47,25 @@ func TestProtectionAndMove(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 }
+
+// A baremetal target is the server uuid, sent in lower case; a number is refused
+// before any request.
+func TestBaremetalTargetsTakeUUID(t *testing.T) {
+	const u = "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+	got, err := parseBatchTarget("baremetal:3F2504E0-4F89-41D3-9A0C-0305E82C3301:80")
+	if err != nil || got["target_uuid"] != u {
+		t.Fatalf("got %v %v", got, err)
+	}
+	if _, err := parseBatchTarget("baremetal:12"); err == nil {
+		t.Fatal("a baremetal number must be refused")
+	}
+	ok := func(m, p string) (int, string) { return 201, `{}` }
+	_, reqs, err := cmdtest.Run(t, NewCmd(), ok, "target", "add", "lb1", "l1", "--type", "baremetal", "--target", "3F2504E0-4F89-41D3-9A0C-0305E82C3301")
+	if err != nil || cmdtest.Last(reqs).Obj()["target_uuid"] != u {
+		t.Fatalf("add: %v %v", err, cmdtest.Last(reqs).Obj())
+	}
+	_, reqs, err = cmdtest.Run(t, NewCmd(), ok, "target", "add", "lb1", "l1", "--type", "baremetal", "--target", "12")
+	if err == nil || len(reqs) != 0 {
+		t.Fatalf("add number: %v, %d requests", err, len(reqs))
+	}
+}

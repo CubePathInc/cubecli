@@ -242,26 +242,29 @@ Custom cloud-init and apps are not available with `--snapshot`. Linux deploys ap
 
 ### Baremetal
 
-A server is named by its number or its uuid wherever a command takes `<id|uuid>`.
+A server is named by its uuid wherever a command takes `<uuid>` (the ID column of
+`cubecli baremetal list`). Server numbers are no longer accepted: the API dropped them,
+so a script that passed a number has to pass the uuid instead. The baremetal target of
+a route, BGP peer, load balancer or alert is the uuid too.
 
 | Command | Description |
 |---------|-------------|
 | `cubecli baremetal deploy` | Deploy a new baremetal server |
 | `cubecli baremetal list` | List all baremetal servers |
-| `cubecli baremetal show <id\|uuid>` | Show server details |
-| `cubecli baremetal sensors <id\|uuid>` | Show BMC sensor data |
-| `cubecli baremetal power start\|stop\|restart <id\|uuid>` | Power management |
-| `cubecli baremetal reinstall start\|status\|cancel <id\|uuid>` | OS reinstallation |
-| `cubecli baremetal monitoring enable\|disable\|status <id\|uuid>` | Monitoring |
-| `cubecli baremetal rescue <id\|uuid>` | Boot into rescue mode |
-| `cubecli baremetal reset-bmc <id\|uuid>` | Reset the BMC |
-| `cubecli baremetal ipmi <id\|uuid>` | Create IPMI proxy session |
+| `cubecli baremetal show <uuid>` | Show server details |
+| `cubecli baremetal sensors <uuid>` | Show BMC sensor data |
+| `cubecli baremetal power start\|stop\|restart <uuid>` | Power management |
+| `cubecli baremetal reinstall start\|status\|cancel <uuid>` | OS reinstallation |
+| `cubecli baremetal monitoring enable\|disable\|status <uuid>` | Monitoring |
+| `cubecli baremetal rescue <uuid>` | Boot into rescue mode |
+| `cubecli baremetal reset-bmc <uuid>` | Reset the BMC |
+| `cubecli baremetal ipmi <uuid>` | Create IPMI proxy session |
 | `cubecli baremetal model list` | List available models |
-| `cubecli baremetal os <id\|uuid>` | Installable OS and disk layouts |
-| `cubecli baremetal kvm <id\|uuid>` | KVM console URL and credentials |
-| `cubecli baremetal protection\|move-project <id\|uuid>` | Protection and project moves |
-| `cubecli baremetal ssh-key add\|remove <id\|uuid> <key_id>` | SSH keys of a server |
-| `cubecli baremetal network attach\|detach <id\|uuid>` | Private network |
+| `cubecli baremetal os <uuid>` | Installable OS and disk layouts |
+| `cubecli baremetal kvm <uuid>` | KVM console URL and credentials |
+| `cubecli baremetal protection\|move-project <uuid>` | Protection and project moves |
+| `cubecli baremetal ssh-key add\|remove <uuid> <key_id>` | SSH keys of a server |
+| `cubecli baremetal network attach\|detach <uuid>` | Private network |
 
 ### Networking
 
@@ -275,7 +278,7 @@ A server is named by its number or its uuid wherever a command takes `<id|uuid>`
 | `cubecli firewall assign <vps_id> --group <id>` | Set the firewall groups of a VPS |
 | `cubecli nat-gateway plans\|list\|show\|create\|update\|delete\|resize\|move\|protection` | NAT gateways |
 | `cubecli floating-ip list\|acquire\|release` | Floating IP management |
-| `cubecli floating-ip assign\|unassign <address>` | IP assignment (`--vps <id>` or `--baremetal <id\|uuid>`) |
+| `cubecli floating-ip assign\|unassign <address>` | IP assignment (`--vps <id>` or `--baremetal <uuid>`) |
 | `cubecli floating-ip reverse-dns <address>` | Reverse DNS |
 | `cubecli location list` | List available locations |
 | `cubecli ddos-attack list` | View DDoS attack history |
