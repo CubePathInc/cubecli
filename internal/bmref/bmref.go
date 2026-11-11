@@ -85,5 +85,20 @@ func Matches(ref string, id FlexID, uuid string) bool {
 	if ref == "" {
 		return false
 	}
-	return string(id) == ref || (uuid != "" && strings.EqualFold(uuid, ref))
+	if canonNumber(string(id)) == canonNumber(ref) {
+		return true
+	}
+	return uuid != "" && strings.EqualFold(uuid, ref)
+}
+
+// canonNumber drops the leading zeros of a digit string ("009" is server 9,
+// as in the route paths); anything else is returned unchanged.
+func canonNumber(s string) string {
+	if !numberRe.MatchString(s) {
+		return s
+	}
+	if t := strings.TrimLeft(s, "0"); t != "" {
+		return t
+	}
+	return "0"
 }

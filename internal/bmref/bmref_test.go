@@ -56,6 +56,10 @@ func TestMatches(t *testing.T) {
 	}{
 		{"9", "9", "", true},
 		{"9", "10", "", false},
+		{"009", "9", "", true}, // leading zeros, as in the route paths
+		{"9", "09", "", true},
+		{"00", "0", "", true},
+		{"09", "90", "", false},
 		{u, "9", u, true},
 		{u, "9", "", false}, // old API: no uuid to match
 		{u, "9", "other", false},
