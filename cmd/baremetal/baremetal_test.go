@@ -39,7 +39,7 @@ func run(t *testing.T, graphql string, args ...string) ([]recorded, error) {
 		case r.URL.Path == "/graphql":
 			_, _ = w.Write([]byte(graphql))
 		case r.URL.Path == "/projects/":
-			_, _ = w.Write([]byte(`[{"project":{"id":1,"name":"p"},"baremetals":[{"id":9,"status":"deploying"}]}]`))
+			_, _ = w.Write([]byte(`[{"project":{"id":1,"name":"p"},"baremetals":[{"id":9,"status":"deploying"},{"id":11,"uuid":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","status":"active"},{"id":"12","status":"active"}]}]`))
 		default:
 			_, _ = w.Write([]byte(`{"detail":"ok"}`))
 		}

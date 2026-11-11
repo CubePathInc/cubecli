@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -14,21 +15,13 @@ import (
 // network, the KVM console and the OS catalog of a server.
 func addManageCmds(parent *cobra.Command) {
 	parent.AddCommand(
-		cmdutil.ProtectionCmd("id", "Baremetal", cmdutil.IntPath("/baremetal/%d/protection", "id")),
-		cmdutil.MoveProjectCmd("id", "baremetal server", cmdutil.IntPath("/baremetal/%d/move-project", "id")),
+		cmdutil.ProtectionCmd("id|uuid", "Baremetal", bmref.Path("/baremetal/%s/protection")),
+		cmdutil.MoveProjectCmd("id|uuid", "baremetal server", bmref.Path("/baremetal/%s/move-project")),
 		sshKeyCmd(),
 		networkCmd(),
 		kvmCmd(),
 		osCmd(),
 	)
-}
-
-func parseID(arg string) (int, error) {
-	id, err := strconv.Atoi(arg)
-	if err != nil {
-		return 0, fmt.Errorf("invalid baremetal ID: %s", arg)
-	}
-	return id, nil
 }
 
 func sshKeyCmd() *cobra.Command {
@@ -38,11 +31,11 @@ func sshKeyCmd() *cobra.Command {
 	}
 
 	addCmd := &cobra.Command{
-		Use:   "add <id> <ssh_key_id>...",
+		Use:   "add <id|uuid> <ssh_key_id>...",
 		Short: "Add SSH keys to a server (used by the next install)",
 		Args:  cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bmID, err := parseID(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
 				return err
 			}
@@ -56,17 +49,17 @@ func sshKeyCmd() *cobra.Command {
 			}
 			client := cmdutil.GetClient(cmd)
 			return cmdutil.RunDetail(cmd, "Adding SSH keys...", "SSH keys added", func() (json.RawMessage, error) {
-				return client.Post(fmt.Sprintf("/baremetal/%d/ssh-keys", bmID), ids)
+				return client.Post(fmt.Sprintf("/baremetal/%s/ssh-keys", bmID), ids)
 			})
 		},
 	}
 
 	removeCmd := &cobra.Command{
-		Use:   "remove <id> <ssh_key_id>",
+		Use:   "remove <id|uuid> <ssh_key_id>",
 		Short: "Remove an SSH key from a server",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bmID, err := parseID(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
 				return err
 			}
@@ -76,7 +69,7 @@ func sshKeyCmd() *cobra.Command {
 			}
 			client := cmdutil.GetClient(cmd)
 			return cmdutil.RunDetail(cmd, "Removing SSH key...", "SSH key removed", func() (json.RawMessage, error) {
-				return client.Delete(fmt.Sprintf("/baremetal/%d/ssh-keys/%d", bmID, keyID))
+				return client.Delete(fmt.Sprintf("/baremetal/%s/ssh-keys/%d", bmID, keyID))
 			})
 		},
 	}
@@ -92,20 +85,20 @@ func networkCmd() *cobra.Command {
 	}
 
 	attachCmd := &cobra.Command{
-		Use:   "attach <id>",
+		Use:   "attach <id|uuid>",
 		Short: "Attach a server to a private network in its location",
 		Long: `Attach a baremetal server to a private network. An address is picked
 automatically; restart the server to apply the change.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bmID, err := parseID(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
 				return err
 			}
 			networkID, _ := cmd.Flags().GetInt("network")
 			client := cmdutil.GetClient(cmd)
 			return cmdutil.RunDetail(cmd, "Attaching private network...", "Private network attached", func() (json.RawMessage, error) {
-				return client.Post(fmt.Sprintf("/baremetal/%d/network", bmID), map[string]int{"network_id": networkID})
+				return client.Post(fmt.Sprintf("/baremetal/%s/network", bmID), map[string]int{"network_id": networkID})
 			})
 		},
 	}
@@ -113,21 +106,21 @@ automatically; restart the server to apply the change.`,
 	_ = attachCmd.MarkFlagRequired("network")
 
 	detachCmd := &cobra.Command{
-		Use:   "detach <id>",
+		Use:   "detach <id|uuid>",
 		Short: "Detach a server from its private network",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bmID, err := parseID(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
 				return err
 			}
-			if !cmdutil.CheckForce(cmd, fmt.Sprintf("Detach baremetal %d from its private network?", bmID)) {
+			if !cmdutil.CheckForce(cmd, fmt.Sprintf("Detach baremetal %s from its private network?", bmID)) {
 				output.PrintWarning("Aborted")
 				return nil
 			}
 			client := cmdutil.GetClient(cmd)
 			return cmdutil.RunDetail(cmd, "Detaching private network...", "Private network detached", func() (json.RawMessage, error) {
-				return client.Delete(fmt.Sprintf("/baremetal/%d/network", bmID))
+				return client.Delete(fmt.Sprintf("/baremetal/%s/network", bmID))
 			})
 		},
 	}
@@ -139,11 +132,11 @@ automatically; restart the server to apply the change.`,
 
 func kvmCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "kvm <id>",
+		Use:   "kvm <id|uuid>",
 		Short: "Show the KVM console URL and credentials of a server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bmID, err := parseID(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
 				return err
 			}
@@ -151,7 +144,7 @@ func kvmCmd() *cobra.Command {
 
 			s := output.NewSpinner("Fetching KVM access...")
 			s.Start()
-			resp, err := client.Get(fmt.Sprintf("/baremetal/%d/kvm", bmID))
+			resp, err := client.Get(fmt.Sprintf("/baremetal/%s/kvm", bmID))
 			s.Stop()
 			if err != nil {
 				return err
@@ -185,11 +178,11 @@ func kvmCmd() *cobra.Command {
 
 func osCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "os <id>",
+		Use:   "os <id|uuid>",
 		Short: "List the operating systems and disk layouts a server can be installed with",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bmID, err := parseID(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
 				return err
 			}
@@ -197,7 +190,7 @@ func osCmd() *cobra.Command {
 
 			s := output.NewSpinner("Fetching operating systems...")
 			s.Start()
-			resp, err := client.Get(fmt.Sprintf("/baremetal/os/%d", bmID))
+			resp, err := client.Get(fmt.Sprintf("/baremetal/os/%s", bmID))
 			s.Stop()
 			if err != nil {
 				return err

@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/CubePathInc/cubecli/internal/api"
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -18,7 +18,11 @@ import (
 func NewCmd() *cobra.Command {
 	baremetalCmd := &cobra.Command{
 		Use:   "baremetal",
-		Short: "Manage baremetal servers",
+		Short: "Manage baremetal servers (a server is named by its number or its uuid)",
+		Long: `Manage baremetal servers.
+
+Wherever a command takes a server <id|uuid>, give either the server number
+(digits only, as shown in the ID column) or its uuid (8-4-4-4-12 hex).`,
 	}
 
 	baremetalDeployCmd := &cobra.Command{
@@ -102,9 +106,10 @@ func NewCmd() *cobra.Command {
 					Name string `json:"name"`
 				} `json:"project"`
 				Baremetals []struct {
-					ID         int    `json:"id"`
-					Hostname   string `json:"hostname"`
-					Status     string `json:"status"`
+					ID          bmref.FlexID `json:"id"`
+					UUID        string       `json:"uuid"`
+					Hostname    string       `json:"hostname"`
+					Status      string       `json:"status"`
 					FloatingIPs []struct {
 						Type           string `json:"type"`
 						Address        string `json:"address"`
@@ -157,7 +162,7 @@ func NewCmd() *cobra.Command {
 						privateIP = privateIP[:i]
 					}
 					t.AddRow(
-						strconv.Itoa(bm.ID),
+						bm.ID.String(),
 						bm.Hostname,
 						p.Project.Name,
 						output.FormatStatus(bm.Status),
@@ -176,15 +181,15 @@ func NewCmd() *cobra.Command {
 	}
 
 	baremetalShowCmd := &cobra.Command{
-		Use:   "show <id>",
+		Use:   "show <id|uuid>",
 		Short: "Show baremetal server details",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Fetching baremetal details...")
@@ -201,10 +206,11 @@ func NewCmd() *cobra.Command {
 					Name string `json:"name"`
 				} `json:"project"`
 				Baremetals []struct {
-					ID       int    `json:"id"`
-					Hostname string `json:"hostname"`
-					Status   string `json:"status"`
-					Label    string `json:"label"`
+					ID          bmref.FlexID `json:"id"`
+					UUID        string       `json:"uuid,omitempty"`
+					Hostname    string       `json:"hostname"`
+					Status      string       `json:"status"`
+					Label       string       `json:"label"`
 					FloatingIPs []struct {
 						Type           string `json:"type"`
 						Address        string `json:"address"`
@@ -242,7 +248,7 @@ func NewCmd() *cobra.Command {
 
 			for _, p := range projects {
 				for _, bm := range p.Baremetals {
-					if bm.ID == bmID {
+					if bmref.Matches(bmID, bm.ID, bm.UUID) {
 						if cmdutil.IsJSON(cmd) {
 							return output.PrintJSON(bm)
 						}
@@ -254,7 +260,10 @@ func NewCmd() *cobra.Command {
 
 						// Basic Info
 						basic := output.NewTable("Basic Info", []string{"Field", "Value"})
-						basic.AddRow("ID", strconv.Itoa(bm.ID))
+						basic.AddRow("ID", bm.ID.String())
+						if bm.UUID != "" {
+							basic.AddRow("UUID", bm.UUID)
+						}
 						basic.AddRow("Hostname", bm.Hostname)
 						basic.AddRow("Project", p.Project.Name)
 						basic.AddRow("Status", output.FormatStatus(bm.Status))
@@ -291,32 +300,32 @@ func NewCmd() *cobra.Command {
 				}
 			}
 
-			return fmt.Errorf("baremetal server with ID %d not found", bmID)
+			return fmt.Errorf("baremetal server with ID %s not found", bmID)
 		},
 	}
 
 	baremetalSensorsCmd := &cobra.Command{
-		Use:   "sensors <id>",
+		Use:   "sensors <id|uuid>",
 		Short: "Show BMC sensor data for a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Fetching sensor data...")
 			s.Start()
 			data, err := client.GraphQL(
 				`query($id: ID!) { baremetal(id: $id) { sensors { ipmiAvailable powerOn lastSeen temperatures { name value unit } fans { name value unit } } } }`,
-				map[string]interface{}{"id": strconv.Itoa(bmID)},
+				map[string]interface{}{"id": bmID},
 			)
 			s.Stop()
 			var apiErr *api.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized {
-				return fmt.Errorf("%s (BMC sensors are read through the GraphQL API, which does not accept browser logins yet: use an API token, for example CUBE_API_TOKEN=<token> cubecli baremetal sensors %d)", apiErr.Detail, bmID)
+				return fmt.Errorf("%s (BMC sensors are read through the GraphQL API, which does not accept browser logins yet: use an API token, for example CUBE_API_TOKEN=<token> cubecli baremetal sensors %s)", apiErr.Detail, bmID)
 			}
 			if err != nil {
 				return err
@@ -342,7 +351,7 @@ func NewCmd() *cobra.Command {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if result.Baremetal == nil {
-				return fmt.Errorf("baremetal server with ID %d not found", bmID)
+				return fmt.Errorf("baremetal server with ID %s not found", bmID)
 			}
 			in := result.Baremetal.Sensors
 
@@ -404,20 +413,20 @@ func NewCmd() *cobra.Command {
 	}
 
 	baremetalRescueCmd := &cobra.Command{
-		Use:   "rescue <id>",
+		Use:   "rescue <id|uuid>",
 		Short: "Boot baremetal server into rescue mode",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Activating rescue mode...")
 			s.Start()
-			resp, err := client.Post(fmt.Sprintf("/baremetal/%d/rescue", bmID), nil)
+			resp, err := client.Post(fmt.Sprintf("/baremetal/%s/rescue", bmID), nil)
 			s.Stop()
 			if err != nil {
 				return err
@@ -448,15 +457,15 @@ func NewCmd() *cobra.Command {
 	}
 
 	baremetalResetBMCCmd := &cobra.Command{
-		Use:   "reset-bmc <id>",
+		Use:   "reset-bmc <id|uuid>",
 		Short: "Reset the BMC of a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			if !cmdutil.CheckForce(cmd, "Are you sure you want to reset the BMC?") {
@@ -466,7 +475,7 @@ func NewCmd() *cobra.Command {
 
 			s := output.NewSpinner("Resetting BMC...")
 			s.Start()
-			resp, err := client.Post(fmt.Sprintf("/baremetal/%d/reset-bmc", bmID), nil)
+			resp, err := client.Post(fmt.Sprintf("/baremetal/%s/reset-bmc", bmID), nil)
 			s.Stop()
 			if err != nil {
 				return err
@@ -482,15 +491,15 @@ func NewCmd() *cobra.Command {
 	}
 
 	baremetalUpdateCmd := &cobra.Command{
-		Use:   "update <id>",
+		Use:   "update <id|uuid>",
 		Short: "Update a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			body := map[string]interface{}{}
@@ -509,7 +518,7 @@ func NewCmd() *cobra.Command {
 
 			s := output.NewSpinner("Updating baremetal server...")
 			s.Start()
-			resp, err := client.Patch(fmt.Sprintf("/baremetal/update/%d", bmID), body)
+			resp, err := client.Patch(fmt.Sprintf("/baremetal/update/%s", bmID), body)
 			s.Stop()
 			if err != nil {
 				return err
@@ -525,20 +534,20 @@ func NewCmd() *cobra.Command {
 	}
 
 	baremetalIPMICmd := &cobra.Command{
-		Use:   "ipmi <id>",
+		Use:   "ipmi <id|uuid>",
 		Short: "Create an IPMI proxy session",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Creating IPMI session...")
 			s.Start()
-			resp, err := client.Post(fmt.Sprintf("/ipmi-proxy/create-session/%d", bmID), nil)
+			resp, err := client.Post(fmt.Sprintf("/ipmi-proxy/create-session/%s", bmID), nil)
 			s.Stop()
 			if err != nil {
 				return err

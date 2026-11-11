@@ -3,8 +3,8 @@ package baremetal
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -17,20 +17,20 @@ func addPowerCmd(parent *cobra.Command) {
 	}
 
 	powerStartCmd := &cobra.Command{
-		Use:   "start <id>",
+		Use:   "start <id|uuid>",
 		Short: "Power on a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Starting baremetal server...")
 			s.Start()
-			resp, err := client.Post(fmt.Sprintf("/baremetal/%d/power/start_metal", bmID), nil)
+			resp, err := client.Post(fmt.Sprintf("/baremetal/%s/power/start_metal", bmID), nil)
 			s.Stop()
 			if err != nil {
 				return err
@@ -46,20 +46,20 @@ func addPowerCmd(parent *cobra.Command) {
 	}
 
 	powerStopCmd := &cobra.Command{
-		Use:   "stop <id>",
+		Use:   "stop <id|uuid>",
 		Short: "Power off a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Stopping baremetal server...")
 			s.Start()
-			resp, err := client.Post(fmt.Sprintf("/baremetal/%d/power/stop_metal", bmID), nil)
+			resp, err := client.Post(fmt.Sprintf("/baremetal/%s/power/stop_metal", bmID), nil)
 			s.Stop()
 			if err != nil {
 				return err
@@ -75,20 +75,20 @@ func addPowerCmd(parent *cobra.Command) {
 	}
 
 	powerRestartCmd := &cobra.Command{
-		Use:   "restart <id>",
+		Use:   "restart <id|uuid>",
 		Short: "Restart a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Restarting baremetal server...")
 			s.Start()
-			resp, err := client.Post(fmt.Sprintf("/baremetal/%d/power/restart_metal", bmID), nil)
+			resp, err := client.Post(fmt.Sprintf("/baremetal/%s/power/restart_metal", bmID), nil)
 			s.Stop()
 			if err != nil {
 				return err

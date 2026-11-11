@@ -3,9 +3,9 @@ package baremetal
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -18,20 +18,20 @@ func addMonitoringCmd(parent *cobra.Command) {
 	}
 
 	monitoringEnableCmd := &cobra.Command{
-		Use:   "enable <id>",
+		Use:   "enable <id|uuid>",
 		Short: "Enable monitoring for a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Enabling monitoring...")
 			s.Start()
-			resp, err := client.Put(fmt.Sprintf("/baremetal/%d/monitoring?enable=true", bmID), nil)
+			resp, err := client.Put(fmt.Sprintf("/baremetal/%s/monitoring?enable=true", bmID), nil)
 			s.Stop()
 			if err != nil {
 				return err
@@ -47,20 +47,20 @@ func addMonitoringCmd(parent *cobra.Command) {
 	}
 
 	monitoringDisableCmd := &cobra.Command{
-		Use:   "disable <id>",
+		Use:   "disable <id|uuid>",
 		Short: "Disable monitoring for a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Disabling monitoring...")
 			s.Start()
-			resp, err := client.Put(fmt.Sprintf("/baremetal/%d/monitoring?enable=false", bmID), nil)
+			resp, err := client.Put(fmt.Sprintf("/baremetal/%s/monitoring?enable=false", bmID), nil)
 			s.Stop()
 			if err != nil {
 				return err
@@ -76,15 +76,15 @@ func addMonitoringCmd(parent *cobra.Command) {
 	}
 
 	monitoringStatusCmd := &cobra.Command{
-		Use:   "status <id>",
+		Use:   "status <id|uuid>",
 		Short: "Show monitoring status for a baremetal server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Fetching monitoring status...")
@@ -101,9 +101,10 @@ func addMonitoringCmd(parent *cobra.Command) {
 					Name string `json:"name"`
 				} `json:"project"`
 				Baremetals []struct {
-					ID               int    `json:"id"`
-					Hostname         string `json:"hostname"`
-					MonitoringEnable bool   `json:"monitoring_enable"`
+					ID               bmref.FlexID `json:"id"`
+					UUID             string       `json:"uuid"`
+					Hostname         string       `json:"hostname"`
+					MonitoringEnable bool         `json:"monitoring_enable"`
 					FloatingIPs      []struct {
 						Type           string `json:"type"`
 						Address        string `json:"address"`
@@ -117,13 +118,17 @@ func addMonitoringCmd(parent *cobra.Command) {
 
 			for _, p := range projects {
 				for _, bm := range p.Baremetals {
-					if bm.ID == bmID {
+					if bmref.Matches(bmID, bm.ID, bm.UUID) {
 						if cmdutil.IsJSON(cmd) {
-							return output.PrintJSON(map[string]interface{}{
+							out := map[string]interface{}{
 								"id":                bm.ID,
 								"hostname":          bm.Hostname,
 								"monitoring_enable": bm.MonitoringEnable,
-							})
+							}
+							if bm.UUID != "" {
+								out["uuid"] = bm.UUID
+							}
+							return output.PrintJSON(out)
 						}
 
 						status := "disabled"
@@ -137,7 +142,10 @@ func addMonitoringCmd(parent *cobra.Command) {
 						}
 
 						t := output.NewTable("Monitoring Status", []string{"Field", "Value"})
-						t.AddRow("ID", strconv.Itoa(bm.ID))
+						t.AddRow("ID", bm.ID.String())
+						if bm.UUID != "" {
+							t.AddRow("UUID", bm.UUID)
+						}
 						t.AddRow("Hostname", bm.Hostname)
 						t.AddRow("IP Addresses", strings.Join(ips, ", "))
 						t.AddRow("Monitoring", output.FormatStatus(status))
@@ -148,7 +156,7 @@ func addMonitoringCmd(parent *cobra.Command) {
 				}
 			}
 
-			return fmt.Errorf("baremetal server with ID %d not found", bmID)
+			return fmt.Errorf("baremetal server with ID %s not found", bmID)
 		},
 	}
 

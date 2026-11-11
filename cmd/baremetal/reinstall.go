@@ -3,8 +3,8 @@ package baremetal
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -17,15 +17,15 @@ func addReinstallCmd(parent *cobra.Command) {
 	}
 
 	reinstallStartCmd := &cobra.Command{
-		Use:   "start <id>",
+		Use:   "start <id|uuid>",
 		Short: "Start a baremetal server reinstallation",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			if !cmdutil.CheckForce(cmd, "Are you sure you want to reinstall this server? All data will be lost.") {
@@ -51,7 +51,7 @@ func addReinstallCmd(parent *cobra.Command) {
 
 			s := output.NewSpinner("Starting reinstallation...")
 			s.Start()
-			resp, err := client.Post(fmt.Sprintf("/baremetal/%d/reinstall", bmID), body)
+			resp, err := client.Post(fmt.Sprintf("/baremetal/%s/reinstall", bmID), body)
 			s.Stop()
 			if err != nil {
 				return err
@@ -67,16 +67,16 @@ func addReinstallCmd(parent *cobra.Command) {
 	}
 
 	reinstallStatusCmd := &cobra.Command{
-		Use:   "status <id>",
+		Use:   "status <id|uuid>",
 		Short: "Check reinstallation status",
 		Long:  "Show whether an OS reinstallation is running: the server status is deploying while it runs.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			s := output.NewSpinner("Fetching reinstallation status...")
@@ -89,8 +89,9 @@ func addReinstallCmd(parent *cobra.Command) {
 
 			var projects []struct {
 				Baremetals []struct {
-					ID     int    `json:"id"`
-					Status string `json:"status"`
+					ID     bmref.FlexID `json:"id"`
+					UUID   string       `json:"uuid"`
+					Status string       `json:"status"`
 				} `json:"baremetals"`
 			}
 			if err := json.Unmarshal(resp, &projects); err != nil {
@@ -99,13 +100,13 @@ func addReinstallCmd(parent *cobra.Command) {
 			status, found := "", false
 			for _, p := range projects {
 				for _, bm := range p.Baremetals {
-					if bm.ID == bmID {
+					if bmref.Matches(bmID, bm.ID, bm.UUID) {
 						status, found = bm.Status, true
 					}
 				}
 			}
 			if !found {
-				return fmt.Errorf("baremetal server with ID %d not found", bmID)
+				return fmt.Errorf("baremetal server with ID %s not found", bmID)
 			}
 
 			result := struct {
@@ -132,15 +133,15 @@ func addReinstallCmd(parent *cobra.Command) {
 	}
 
 	reinstallCancelCmd := &cobra.Command{
-		Use:   "cancel <id>",
+		Use:   "cancel <id|uuid>",
 		Short: "Cancel a pending or running reinstallation",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 
-			bmID, err := strconv.Atoi(args[0])
+			bmID, err := bmref.Parse(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid baremetal id: %s", args[0])
+				return err
 			}
 
 			if !cmdutil.CheckForce(cmd, "Cancel the reinstallation of this server?") {
@@ -150,7 +151,7 @@ func addReinstallCmd(parent *cobra.Command) {
 
 			s := output.NewSpinner("Cancelling reinstallation...")
 			s.Start()
-			resp, err := client.Delete(fmt.Sprintf("/baremetal/%d/reinstall", bmID))
+			resp, err := client.Delete(fmt.Sprintf("/baremetal/%s/reinstall", bmID))
 			s.Stop()
 			if err != nil {
 				return err
