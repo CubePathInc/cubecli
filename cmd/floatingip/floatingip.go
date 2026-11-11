@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/CubePathInc/cubecli/internal/bmref"
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
 	"github.com/spf13/cobra"
@@ -50,8 +51,8 @@ func NewCmd() *cobra.Command {
 			var result struct {
 				SingleIPs []apiIP `json:"single_ips"`
 				Subnets   []struct {
-					Prefix         int    `json:"prefix"`
-					ProtectionType string `json:"protection_type"`
+					Prefix         int     `json:"prefix"`
+					ProtectionType string  `json:"protection_type"`
 					IPAddresses    []apiIP `json:"ip_addresses"`
 				} `json:"subnets"`
 			}
@@ -190,12 +191,12 @@ func NewCmd() *cobra.Command {
 			address := args[0]
 
 			vpsID, _ := cmd.Flags().GetInt("vps")
-			baremetalID, _ := cmd.Flags().GetInt("baremetal")
+			baremetalArg, _ := cmd.Flags().GetString("baremetal")
 
-			if vpsID == 0 && baremetalID == 0 {
+			if vpsID == 0 && baremetalArg == "" {
 				return fmt.Errorf("exactly one of --vps or --baremetal is required")
 			}
-			if vpsID != 0 && baremetalID != 0 {
+			if vpsID != 0 && baremetalArg != "" {
 				return fmt.Errorf("exactly one of --vps or --baremetal is required, not both")
 			}
 
@@ -203,7 +204,11 @@ func NewCmd() *cobra.Command {
 			if vpsID != 0 {
 				endpoint = fmt.Sprintf("/floating_ips/assign/vps/%d?address=%s", vpsID, address)
 			} else {
-				endpoint = fmt.Sprintf("/floating_ips/assign/baremetal/%d?address=%s", baremetalID, address)
+				baremetalRef, err := bmref.Parse(baremetalArg)
+				if err != nil {
+					return err
+				}
+				endpoint = fmt.Sprintf("/floating_ips/assign/baremetal/%s?address=%s", baremetalRef, address)
 			}
 
 			s := output.NewSpinner("Assigning floating IP...")
@@ -289,7 +294,7 @@ func NewCmd() *cobra.Command {
 	floatingIPReleaseCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
 	floatingIPAssignCmd.Flags().Int("vps", 0, "VPS ID to assign to")
-	floatingIPAssignCmd.Flags().Int("baremetal", 0, "Baremetal ID to assign to")
+	floatingIPAssignCmd.Flags().String("baremetal", "", "Baremetal server to assign to (number or uuid)")
 
 	floatingIPUnassignCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
