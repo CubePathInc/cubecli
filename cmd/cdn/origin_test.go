@@ -132,3 +132,83 @@ func TestOriginCreateWithAddress(t *testing.T) {
 		t.Fatalf("bucket sent without --bucket: %v", b)
 	}
 }
+
+func TestOriginCreateHealthFlagsSentOnlyWhenSet(t *testing.T) {
+	reqs, err := run(t, "cdn", "origin", "create", zoneUUID, "--name", "web", "--address", "1.2.3.4",
+		"--health-type", "http", "--health-method", "HEAD", "--health-expect", "200 301",
+		"--health-interval", "30", "--health-threshold", "5", "--health-path", "/ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := reqs[len(reqs)-1].Body
+	if b["health_check_type"] != "http" || b["health_check_method"] != "HEAD" || b["health_check_expected_status"] != "200 301" ||
+		b["health_check_interval"] != float64(30) || b["health_check_threshold"] != float64(5) || b["health_check_path"] != "/ping" {
+		t.Fatalf("body %v", b)
+	}
+
+	reqs, err = run(t, "cdn", "origin", "create", zoneUUID, "--name", "web", "--address", "1.2.3.4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = reqs[len(reqs)-1].Body
+	for _, k := range []string{"health_check_type", "health_check_method", "health_check_expected_status", "health_check_interval", "health_check_threshold"} {
+		if _, ok := b[k]; ok {
+			t.Fatalf("%s sent without its flag: %v", k, b)
+		}
+	}
+}
+
+// An http check with no --health-path is created with no path at all: the API puts "/", not the
+// "/health" of the flag's default.
+func TestOriginCreateHTTPCheckWithoutPathSendsNone(t *testing.T) {
+	reqs, err := run(t, "cdn", "origin", "create", zoneUUID, "--name", "web", "--address", "1.2.3.4", "--health-type", "http")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := reqs[len(reqs)-1].Body
+	if b["health_check_type"] != "http" {
+		t.Fatalf("body %v", b)
+	}
+	if _, ok := b["health_check_path"]; ok {
+		t.Fatalf("path sent with an http check and no --health-path: %v", b)
+	}
+}
+
+func TestOriginCreateRejectsBadHealthEnums(t *testing.T) {
+	for _, args := range [][]string{{"--health-type", "icmp"}, {"--health-method", "POST"}} {
+		all := append([]string{"cdn", "origin", "create", zoneUUID, "--name", "web", "--address", "1.2.3.4"}, args...)
+		reqs, err := run(t, all...)
+		if err == nil || len(reqs) != 0 {
+			t.Fatalf("%v: err %v, sent %+v", args, err, reqs)
+		}
+	}
+}
+
+func TestOriginCreateBucketRefusesNewHealthFlags(t *testing.T) {
+	for _, args := range [][]string{{"--health-type", "http"}, {"--health-expect", "200"}, {"--health-interval", "20"}} {
+		all := append([]string{"cdn", "origin", "create", zoneUUID, "--name", "p", "--bucket", "photos"}, args...)
+		reqs, err := run(t, all...)
+		if err == nil {
+			t.Fatalf("%v: expected an error", args)
+		}
+		for _, r := range reqs {
+			if r.Method == http.MethodPost {
+				t.Fatalf("%v: sent %+v", args, r)
+			}
+		}
+	}
+}
+
+func TestOriginUpdateSendsOnlyChangedHealthFlags(t *testing.T) {
+	reqs, err := run(t, "cdn", "origin", "update", zoneUUID, "o1", "--health-type", "http")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := reqs[len(reqs)-1]
+	if req.Method != http.MethodPatch || req.Path != "/cdn/zones/"+zoneUUID+"/origins/o1" {
+		t.Fatalf("got %+v", req)
+	}
+	if len(req.Body) != 1 || req.Body["health_check_type"] != "http" {
+		t.Fatalf("body %v", req.Body)
+	}
+}

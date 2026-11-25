@@ -119,7 +119,13 @@ func addWAFCmd(parent *cobra.Command) {
 	wafCreateCmd := &cobra.Command{
 		Use:   "create <zone_uuid>",
 		Short: "Create a new WAF rule",
-		Args:  cobra.ExactArgs(1),
+		Long: `Create a WAF rule. In a firewall_ip or firewall_country rule, allow_ips and
+allow_countries mean only these: when the list is not empty, a client that is not on it
+gets a 403, and block_ips and block_countries win over the allow lists. In allow_countries,
+XX is a client of no known country (blocked unless XX is listed). An IPv6 client is not on a
+list of IPv4 addresses.`,
+		Example: `  cubecli cdn waf create <zone_uuid> --name eu-only --type firewall_country --action '{"allow_countries":["ES","FR","XX"]}'`,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 			zoneUUID := args[0]
@@ -275,7 +281,7 @@ func addWAFCmd(parent *cobra.Command) {
 	wafCreateCmd.Flags().StringP("name", "n", "", "Name of the WAF rule")
 	wafCreateCmd.Flags().StringP("type", "t", "", "WAF rule type")
 	wafCreateCmd.Flags().IntP("priority", "p", 100, "Rule priority")
-	wafCreateCmd.Flags().StringP("action", "a", "", "Action configuration (JSON string)")
+	wafCreateCmd.Flags().StringP("action", "a", "", "Action configuration (JSON string); allow_ips and allow_countries mean only these")
 	wafCreateCmd.Flags().StringP("match", "m", "", "Match conditions (JSON string)")
 	wafCreateCmd.Flags().Bool("disabled", false, "Create rule in disabled state")
 	wafCreateCmd.MarkFlagRequired("name")

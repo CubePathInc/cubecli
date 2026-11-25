@@ -46,7 +46,10 @@ func addOriginCmd(parent *cobra.Command) {
 				Weight   int    `json:"weight"`
 				Priority int    `json:"priority"`
 				Backup   bool   `json:"is_backup"`
-				Health   string `json:"health"`
+				Health   string `json:"health_status"`
+				CheckOn  *bool  `json:"health_check_enabled"`
+				Check    string `json:"health_check_type"`
+				Detail   string `json:"health_detail"`
 				Enabled  bool   `json:"enabled"`
 				Bucket   string `json:"object_storage_bucket_uuid"`
 			}
@@ -54,8 +57,13 @@ func addOriginCmd(parent *cobra.Command) {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("CDN Origins", []string{"UUID", "Name", "Address", "Port", "Protocol", "Weight", "Priority", "Backup", "Health", "Enabled", "Bucket"})
+			t := output.NewTable("CDN Origins", []string{"UUID", "Name", "Address", "Port", "Protocol", "Weight", "Priority", "Backup", "Health", "Check", "Detail", "Enabled", "Bucket"})
 			for _, o := range origins {
+				// The API reports "unknown" for an origin whose check is off and for one no node
+				// has checked yet; only the first is "not checked".
+				if o.CheckOn != nil && !*o.CheckOn {
+					o.Health = "not checked"
+				}
 				t.AddRow(
 					o.UUID,
 					o.Name,
@@ -66,6 +74,8 @@ func addOriginCmd(parent *cobra.Command) {
 					strconv.Itoa(o.Priority),
 					strconv.FormatBool(o.Backup),
 					o.Health,
+					o.Check,
+					o.Detail,
 					strconv.FormatBool(o.Enabled),
 					o.Bucket,
 				)
@@ -81,8 +91,14 @@ func addOriginCmd(parent *cobra.Command) {
 		Long: `Create a CDN origin. An origin is either an address (--url or --address) or
 one of your Object Storage buckets (--bucket): the CDN then reads the bucket with a
 read-only key it manages, and deleting the origin disconnects the bucket. A bucket
-can be the origin of one zone at a time.`,
+can be the origin of one zone at a time.
+
+The health check is a TCP connect by default. --health-type http makes the edge request
+--health-path and take the origin out when the answer is not one of --health-expect (if it
+is the only origin of the zone, the zone answers 503). All the origins of a zone share one
+check: the one of the first origin by priority that has its check enabled.`,
 		Example: `  cubecli cdn origin create <zone_uuid> --name web --url https://origin.example.com
+  cubecli cdn origin create <zone_uuid> --name web --url https://origin.example.com --health-type http --health-path /ping --health-expect 200
   cubecli cdn origin create <zone_uuid> --name photos --bucket photos`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -121,12 +137,22 @@ can be the origin of one zone at a time.`,
 			if bucket != "" {
 				// The API fills everything else of a bucket origin (connection, health check,
 				// enabled) and refuses those fields: only name, weight, priority and backup go.
-				if cmd.Flags().Changed("health-path") || cmd.Flags().Changed("no-health-check") {
-					return fmt.Errorf("--health-path and --no-health-check cannot be used with --bucket")
+				for _, f := range append([]string{"health-path", "no-health-check"}, healthCheckFlags...) {
+					if cmd.Flags().Changed(f) {
+						return fmt.Errorf("--health-path, --no-health-check and the --health-* flags cannot be used with --bucket")
+					}
 				}
 				for _, k := range []string{"health_check_enabled", "health_check_path", "verify_ssl", "enabled"} {
 					delete(body, k)
 				}
+			}
+			if err := addHealthCheckFlags(cmd, body); err != nil {
+				return err
+			}
+			// An http check with no --health-path goes to "/" (the API decides when the path is
+			// not sent); the "/health" of the flag is only what a tcp check stores.
+			if body["health_check_type"] == "http" && !cmd.Flags().Changed("health-path") {
+				delete(body, "health_check_path")
 			}
 			if originURL != "" {
 				body["origin_url"] = originURL
@@ -235,6 +261,10 @@ can be the origin of one zone at a time.`,
 				body["base_path"] = basePath
 			}
 
+			if err := addHealthCheckFlags(cmd, body); err != nil {
+				return err
+			}
+
 			if len(body) == 0 {
 				return fmt.Errorf("at least one flag must be specified")
 			}
@@ -300,6 +330,7 @@ disconnects the bucket: the CDN stops reading it and its public URLs stop workin
 	originCreateCmd.Flags().Bool("backup", false, "Mark origin as backup")
 	originCreateCmd.Flags().String("health-path", "/health", "Health check path")
 	originCreateCmd.Flags().Bool("no-health-check", false, "Disable health checks")
+	addHealthCheckFlagDefs(originCreateCmd)
 	originCreateCmd.Flags().Bool("no-verify-ssl", false, "Disable SSL verification")
 	originCreateCmd.Flags().String("host-header", "", "Host header override")
 	originCreateCmd.Flags().String("base-path", "", "Base path for the origin")
@@ -318,10 +349,54 @@ disconnects the bucket: the CDN stops reading it and its public URLs stop workin
 	originUpdateCmd.Flags().Int("priority", 0, "New priority")
 	originUpdateCmd.Flags().String("host-header", "", "New host header override")
 	originUpdateCmd.Flags().String("base-path", "", "New base path")
+	addHealthCheckFlagDefs(originUpdateCmd)
 
 	// Origin delete flags
 	originDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 
 	originCmd.AddCommand(originListCmd, originCreateCmd, originUpdateCmd, originDeleteCmd)
 	parent.AddCommand(originCmd)
+}
+
+// healthCheckFlags are the flags of the origin health check; they are sent only when set, so the
+// API applies its own defaults.
+var healthCheckFlags = []string{"health-type", "health-method", "health-expect", "health-interval", "health-threshold"}
+
+func addHealthCheckFlagDefs(cmd *cobra.Command) {
+	cmd.Flags().String("health-type", "", "Health check type: tcp (default) or http")
+	cmd.Flags().String("health-method", "", "Method of an http health check: GET (default) or HEAD")
+	cmd.Flags().String("health-expect", "", `Statuses or classes an http health check accepts, up to 8 separated by spaces (default "2xx 3xx"), e.g. "200 301"`)
+	cmd.Flags().Int("health-interval", 0, "Seconds between health checks from each edge node, 5 to 300 (default 10)")
+	cmd.Flags().Int("health-threshold", 0, "Results in a row that change the health status, 1 to 10 (default 3)")
+}
+
+// addHealthCheckFlags copies the health check flags that were set into the request body.
+func addHealthCheckFlags(cmd *cobra.Command, body map[string]interface{}) error {
+	if cmd.Flags().Changed("health-type") {
+		v, _ := cmd.Flags().GetString("health-type")
+		if v != "tcp" && v != "http" {
+			return fmt.Errorf("--health-type must be tcp or http")
+		}
+		body["health_check_type"] = v
+	}
+	if cmd.Flags().Changed("health-method") {
+		v, _ := cmd.Flags().GetString("health-method")
+		if v != "GET" && v != "HEAD" {
+			return fmt.Errorf("--health-method must be GET or HEAD")
+		}
+		body["health_check_method"] = v
+	}
+	if cmd.Flags().Changed("health-expect") {
+		v, _ := cmd.Flags().GetString("health-expect")
+		body["health_check_expected_status"] = v
+	}
+	if cmd.Flags().Changed("health-interval") {
+		v, _ := cmd.Flags().GetInt("health-interval")
+		body["health_check_interval"] = v
+	}
+	if cmd.Flags().Changed("health-threshold") {
+		v, _ := cmd.Flags().GetInt("health-threshold")
+		body["health_check_threshold"] = v
+	}
+	return nil
 }
