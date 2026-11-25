@@ -206,8 +206,16 @@ func NewCmd() *cobra.Command {
 				body["certificate"] = cert
 			}
 
+			waf, err := managedWafBody(cmd)
+			if err != nil {
+				return err
+			}
+			if waf != nil {
+				body["managed_waf"] = waf
+			}
+
 			if len(body) == 0 {
-				return fmt.Errorf("at least one of --name, --domain, --ssl-type, or --certificate must be specified")
+				return fmt.Errorf("at least one of --name, --domain, --ssl-type, --certificate or a --waf-* flag must be specified")
 			}
 
 			s := output.NewSpinner("Updating CDN zone...")
@@ -304,6 +312,7 @@ func NewCmd() *cobra.Command {
 	zoneUpdateCmd.Flags().StringP("domain", "d", "", "Custom domain")
 	zoneUpdateCmd.Flags().String("ssl-type", "", "SSL type")
 	zoneUpdateCmd.Flags().String("certificate", "", "SSL certificate")
+	addManagedWafFlags(zoneUpdateCmd)
 
 	// Zone delete flags
 	zoneDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
@@ -386,6 +395,7 @@ func NewCmd() *cobra.Command {
 	addMetricsCmd(cdnCmd)
 	addPlanCmd(cdnCmd)
 	addCacheCmd(cdnCmd)
+	addEventsCmd(cdnCmd)
 	addTokenAuthCmd(cdnCmd)
 
 	return cdnCmd

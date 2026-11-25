@@ -446,5 +446,6 @@ func addMetricsCmd(parent *cobra.Command) {
 		metricsPopsCmd,
 		metricsFileExtensionsCmd,
 	)
+	addWafMetricsCmds(metricsCmd)
 	parent.AddCommand(metricsCmd)
 }
