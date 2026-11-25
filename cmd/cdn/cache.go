@@ -21,7 +21,7 @@ func addCacheCmd(parent *cobra.Command) {
 		Use:   "purge <zone_uuid> [path...]",
 		Short: "Purge paths, path prefixes, cache tags, hostnames or the whole cache of a zone",
 		Long: `Purge cached content on every edge location. Give exactly one of:
-up to 100 paths starting with "/" (a trailing "*" purges every URL under a prefix),
+up to 100 paths starting with "/", the URL your visitors use even if a url_rewrite rule changes it (a trailing "*" purges every URL under a prefix),
 --tag (up to 30 cache tags, needs the zone's cache tag header), --host (one or two
 of the zone's hostnames) or --everything. Without --host, both the system and the
 custom domain are purged.`,
