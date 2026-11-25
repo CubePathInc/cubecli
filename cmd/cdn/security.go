@@ -19,7 +19,7 @@ var wafCategoryPattern = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
 func addManagedWafFlags(cmd *cobra.Command) {
 	cmd.Flags().String("waf-mode", "", "Managed WAF detection mode: off or log (log only, nothing is blocked)")
 	cmd.Flags().Int("waf-level", 0, "Managed WAF sensitivity level: 1 or 2")
-	cmd.Flags().IntSlice("waf-exclude-rule-ids", nil, "Rule ids the managed WAF ignores (replaces the list, up to 256; pass an empty value to clear)")
+	cmd.Flags().StringSlice("waf-exclude-rule-ids", nil, "Rule ids the managed WAF ignores (replaces the list, up to 256; pass an empty value to clear)")
 	cmd.Flags().StringSlice("waf-exclude-categories", nil, "Categories the managed WAF ignores (replaces the list, up to 64; pass an empty value to clear)")
 }
 
@@ -41,7 +41,21 @@ func managedWafBody(cmd *cobra.Command) (map[string]interface{}, error) {
 		waf["level"] = level
 	}
 	if cmd.Flags().Changed("waf-exclude-rule-ids") {
-		ids, _ := cmd.Flags().GetIntSlice("waf-exclude-rule-ids")
+		// A string slice, not an int slice: an empty value (--waf-exclude-rule-ids "") clears the list, and an int
+		// slice would fail to parse it.
+		raw, _ := cmd.Flags().GetStringSlice("waf-exclude-rule-ids")
+		ids := []int{}
+		for _, item := range raw {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			id, err := strconv.Atoi(item)
+			if err != nil {
+				return nil, fmt.Errorf("--waf-exclude-rule-ids: %q is not a number", item)
+			}
+			ids = append(ids, id)
+		}
 		seen := map[int]bool{}
 		for _, id := range ids {
 			if id < 1 || int64(id) > 4294967295 {
@@ -54,9 +68,6 @@ func managedWafBody(cmd *cobra.Command) (map[string]interface{}, error) {
 		}
 		if len(ids) > 256 {
 			return nil, fmt.Errorf("--waf-exclude-rule-ids: at most 256 ids")
-		}
-		if ids == nil {
-			ids = []int{}
 		}
 		waf["exclude_rule_ids"] = ids
 	}

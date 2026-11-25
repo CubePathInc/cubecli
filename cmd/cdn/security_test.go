@@ -60,7 +60,19 @@ func TestZoneUpdateManagedWaf(t *testing.T) {
 	if r.Method != http.MethodPatch || r.Path != "/cdn/zones/z1" || waf["mode"] != "log" || waf["level"] != 2.0 || len(ids) != 2 || cats == nil || len(cats) != 0 {
 		t.Fatalf("got %s %s", r.Method, r.Raw)
 	}
+	// An empty value clears the list of rule ids, as the help says.
+	_, reqs, err = cmdtest.Run(t, NewCmd(), nil, "zone", "update", "z1", "--waf-exclude-rule-ids", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = cmdtest.Last(reqs)
+	waf, _ = r.Obj()["managed_waf"].(map[string]interface{})
+	ids, ok := waf["exclude_rule_ids"].([]interface{})
+	if !ok || len(ids) != 0 || len(waf) != 1 {
+		t.Fatalf("clearing the ids: got %s", r.Raw)
+	}
 	for _, args := range [][]string{
+		{"zone", "update", "z1", "--waf-exclude-rule-ids", "abc"},
 		{"zone", "update", "z1", "--waf-mode", "block"},
 		{"zone", "update", "z1", "--waf-level", "3"},
 		{"zone", "update", "z1", "--waf-exclude-rule-ids", "0"},
