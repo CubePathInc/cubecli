@@ -58,10 +58,17 @@ func addOriginCmd(parent *cobra.Command) {
 			}
 
 			t := output.NewTable("CDN Origins", []string{"UUID", "Name", "Address", "Port", "Protocol", "Weight", "Priority", "Backup", "Health", "Check", "Detail", "Enabled", "Bucket"})
+			// The nodes keep one check per zone, the one of the first origin that has it on, and
+			// apply it to every enabled origin: the API says "unknown" for an origin nobody
+			// checks and for one no node has checked yet, and only the first is "not checked".
+			zoneChecked := false
 			for _, o := range origins {
-				// The API reports "unknown" for an origin whose check is off and for one no node
-				// has checked yet; only the first is "not checked".
-				if o.CheckOn != nil && !*o.CheckOn {
+				if o.Enabled && o.CheckOn != nil && *o.CheckOn {
+					zoneChecked = true
+				}
+			}
+			for _, o := range origins {
+				if !zoneChecked && o.CheckOn != nil {
 					o.Health = "not checked"
 				}
 				t.AddRow(
