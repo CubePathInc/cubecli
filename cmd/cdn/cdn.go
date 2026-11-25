@@ -318,7 +318,7 @@ func NewCmd() *cobra.Command {
 	zoneUpdateCmd.Flags().String("ssl-type", "", "SSL type")
 	zoneUpdateCmd.Flags().String("certificate", "", "SSL certificate")
 	zoneUpdateCmd.Flags().String("cache-tag-header", "", "Origin response header that carries the cache tags (empty turns tag purges off)")
-	zoneUpdateCmd.Flags().Bool("compression", false, "Compress text responses at the edge (--compression=false to turn it off)")
+	zoneUpdateCmd.Flags().Bool("compression", false, "Compress text responses at the edge; off by default, with it off nothing is compressed, gzip included (--compression=false to turn it off)")
 
 	// Zone delete flags
 	zoneDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
