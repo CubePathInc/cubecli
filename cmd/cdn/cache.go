@@ -19,24 +19,41 @@ func addCacheCmd(parent *cobra.Command) {
 
 	purgeCmd := &cobra.Command{
 		Use:   "purge <zone_uuid> [path...]",
-		Short: "Purge paths, path prefixes or the whole cache of a zone",
-		Long: `Purge cached content on every edge location. Give up to 100 paths
-starting with "/"; a trailing "*" purges every URL under a prefix. --everything
-purges the whole zone. Both the system and the custom domain are purged.`,
+		Short: "Purge paths, path prefixes, cache tags, hostnames or the whole cache of a zone",
+		Long: `Purge cached content on every edge location. Give exactly one of:
+up to 100 paths starting with "/" (a trailing "*" purges every URL under a prefix),
+--tag (up to 30 cache tags, needs the zone's cache tag header), --host (one or two
+of the zone's hostnames) or --everything. Without --host, both the system and the
+custom domain are purged.`,
 		Example: `  cubecli cdn cache purge <zone_uuid> /assets/app.css "/images/*"
+  cubecli cdn cache purge <zone_uuid> --tag news --tag product-42
+  cubecli cdn cache purge <zone_uuid> --host www.example.com
   cubecli cdn cache purge <zone_uuid> --everything`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 			everything, _ := cmd.Flags().GetBool("everything")
+			tags, _ := cmd.Flags().GetStringSlice("tag")
+			hosts, _ := cmd.Flags().GetStringSlice("host")
 			paths := args[1:]
-			if everything == (len(paths) > 0) {
-				return fmt.Errorf("give either paths or --everything")
+			chosen := 0
+			for _, given := range []bool{everything, len(paths) > 0, len(tags) > 0, len(hosts) > 0} {
+				if given {
+					chosen++
+				}
+			}
+			if chosen != 1 {
+				return fmt.Errorf("give exactly one of paths, --tag, --host or --everything")
 			}
 			body := map[string]interface{}{}
-			if everything {
+			switch {
+			case everything:
 				body["everything"] = true
-			} else {
+			case len(tags) > 0:
+				body["tags"] = tags
+			case len(hosts) > 0:
+				body["hosts"] = hosts
+			default:
 				body["paths"] = paths
 			}
 
@@ -64,6 +81,8 @@ purges the whole zone. Both the system and the custom domain are purged.`,
 		},
 	}
 	purgeCmd.Flags().Bool("everything", false, "Purge the whole cache of the zone")
+	purgeCmd.Flags().StringSlice("tag", nil, "Purge the objects with this cache tag (repeat or comma separate, up to 30)")
+	purgeCmd.Flags().StringSlice("host", nil, "Purge the objects cached for this hostname of the zone (up to 2)")
 
 	listCmd := &cobra.Command{
 		Use:   "purges <zone_uuid>",
@@ -94,6 +113,8 @@ purges the whole zone. Both the system and the custom domain are purged.`,
 				PurgeUUID   string     `json:"purge_uuid"`
 				Scope       string     `json:"scope"`
 				Paths       []string   `json:"paths"`
+				Tags        []string   `json:"tags"`
+				Hosts       []string   `json:"hosts"`
 				Status      string     `json:"status"`
 				RequestedAt string     `json:"requested_at"`
 				Nodes       progress   `json:"nodes"`
@@ -106,7 +127,13 @@ purges the whole zone. Both the system and the custom domain are purged.`,
 			t := output.NewTable("Cache Purges", []string{"UUID", "Requested", "Scope", "Status", "Nodes", "PoPs"})
 			for _, p := range purges {
 				scope := "everything"
-				if p.Scope != "everything" {
+				switch p.Scope {
+				case "tags":
+					scope = "tags: " + strings.Join(p.Tags, " ")
+				case "hosts":
+					scope = "hosts: " + strings.Join(p.Hosts, " ")
+				case "everything":
+				default:
 					scope = strings.Join(p.Paths, " ")
 				}
 				pops := make([]string, 0, len(p.Pops))

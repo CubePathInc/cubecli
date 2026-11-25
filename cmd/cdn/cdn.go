@@ -206,8 +206,21 @@ func NewCmd() *cobra.Command {
 				body["certificate"] = cert
 			}
 
+			if cmd.Flags().Changed("cache-tag-header") {
+				header, _ := cmd.Flags().GetString("cache-tag-header")
+				if header == "" {
+					body["cache_tag_header"] = nil // an empty value turns tag purges off
+				} else {
+					body["cache_tag_header"] = header
+				}
+			}
+			if cmd.Flags().Changed("compression") {
+				compression, _ := cmd.Flags().GetBool("compression")
+				body["compression_enabled"] = compression
+			}
+
 			if len(body) == 0 {
-				return fmt.Errorf("at least one of --name, --domain, --ssl-type, or --certificate must be specified")
+				return fmt.Errorf("at least one of --name, --domain, --ssl-type, --certificate, --cache-tag-header or --compression must be specified")
 			}
 
 			s := output.NewSpinner("Updating CDN zone...")
@@ -304,6 +317,8 @@ func NewCmd() *cobra.Command {
 	zoneUpdateCmd.Flags().StringP("domain", "d", "", "Custom domain")
 	zoneUpdateCmd.Flags().String("ssl-type", "", "SSL type")
 	zoneUpdateCmd.Flags().String("certificate", "", "SSL certificate")
+	zoneUpdateCmd.Flags().String("cache-tag-header", "", "Origin response header that carries the cache tags (empty turns tag purges off)")
+	zoneUpdateCmd.Flags().Bool("compression", false, "Compress text responses at the edge (--compression=false to turn it off)")
 
 	// Zone delete flags
 	zoneDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")

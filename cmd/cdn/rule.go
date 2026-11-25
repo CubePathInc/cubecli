@@ -119,7 +119,17 @@ func addRuleCmd(parent *cobra.Command) {
 	ruleCreateCmd := &cobra.Command{
 		Use:   "create <zone_uuid>",
 		Short: "Create a new CDN rule",
-		Args:  cobra.ExactArgs(1),
+		Long: `Create an edge rule. --action is a JSON object that depends on --type:
+  cache         {"ttl": 3600, "browser_ttl": 600} plus optional "cache_everything" (also cache HTML,
+                JSON and XML), "grace", "stale_if_error" and "status_ttl" ({"404": 60})
+  cache_key     {"query": "none"} (all, none, allow or strip, with "query_params"), "vary_device"
+                and "vary_headers". Adding, changing or removing one empties the cache of the zone.
+  url_rewrite   {"path": {"mode": "prefix", "from": "/old/", "to": "/new/"}, "strip_query": ["utm_*"],
+                "set_query": {"src": "cdn"}}. The origin gets the rewritten URL and so does the cache.`,
+		Example: `  cubecli cdn rule create <zone_uuid> --name key --type cache_key --action '{"query":"none"}'
+  cubecli cdn rule create <zone_uuid> --name old --type url_rewrite \
+    --action '{"path":{"mode":"prefix","from":"/old/","to":"/new/"}}'`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 			zoneUUID := args[0]
@@ -273,7 +283,7 @@ func addRuleCmd(parent *cobra.Command) {
 
 	// Rule create flags
 	ruleCreateCmd.Flags().StringP("name", "n", "", "Name of the rule")
-	ruleCreateCmd.Flags().StringP("type", "t", "", "Rule type (cache, cache_bypass, redirect, header_request, header_response)")
+	ruleCreateCmd.Flags().StringP("type", "t", "", "Rule type (cache, cache_key, cache_bypass, url_rewrite, redirect, header_request, header_response)")
 	ruleCreateCmd.Flags().IntP("priority", "p", 100, "Rule priority")
 	ruleCreateCmd.Flags().StringP("action", "a", "", "Action configuration (JSON string)")
 	ruleCreateCmd.Flags().StringP("match", "m", "", "Match conditions (JSON string)")

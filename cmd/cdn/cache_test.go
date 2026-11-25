@@ -24,7 +24,28 @@ func TestPurge(t *testing.T) {
 	if strings.TrimSpace(string(cmdtest.Last(reqs).Raw)) != `{"everything":true}` {
 		t.Fatalf("got %s", cmdtest.Last(reqs).Raw)
 	}
-	for _, args := range [][]string{{"cache", "purge", "z1"}, {"cache", "purge", "z1", "/a", "--everything"}} {
+	_, reqs, err = cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) { return 202, `{"purge_uuid":"p3"}` },
+		"cache", "purge", "z1", "--tag", "news", "--tag", "front,product-42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(cmdtest.Last(reqs).Raw)); got != `{"tags":["news","front","product-42"]}` {
+		t.Fatalf("got %s", got)
+	}
+	_, reqs, err = cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) { return 202, `{"purge_uuid":"p4"}` },
+		"cache", "purge", "z1", "--host", "www.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(cmdtest.Last(reqs).Raw)); got != `{"hosts":["www.example.com"]}` {
+		t.Fatalf("got %s", got)
+	}
+	for _, args := range [][]string{
+		{"cache", "purge", "z1"},
+		{"cache", "purge", "z1", "/a", "--everything"},
+		{"cache", "purge", "z1", "--tag", "a", "--host", "b"},
+		{"cache", "purge", "z1", "/a", "--tag", "a"},
+	} {
 		if _, reqs, err := cmdtest.Run(t, NewCmd(), nil, args...); err == nil || len(reqs) != 0 {
 			t.Fatalf("%v: got %v", args, err)
 		}
@@ -52,5 +73,38 @@ func TestTokenAuth(t *testing.T) {
 	r = cmdtest.Last(reqs)
 	if r.Path != "/cdn/zones/z1/token-auth/sign-url" || r.Obj()["expires_in"] != 60.0 || !strings.Contains(out, "token=t") {
 		t.Fatalf("got %s %s %s", r.Path, r.Raw, out)
+	}
+}
+
+func TestZoneUpdateCacheTagHeaderAndCompression(t *testing.T) {
+	ok := func(m, p string) (int, string) { return 200, `{"detail":"ok"}` }
+	_, reqs, err := cmdtest.Run(t, NewCmd(), ok, "zone", "update", "z1", "--cache-tag-header", "Cache-Tag", "--compression")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := cmdtest.Last(reqs)
+	if r.Method != http.MethodPatch || r.Path != "/cdn/zones/z1" || r.Obj()["cache_tag_header"] != "Cache-Tag" || r.Obj()["compression_enabled"] != true {
+		t.Fatalf("got %s %s %s", r.Method, r.Path, r.Raw)
+	}
+	_, reqs, err = cmdtest.Run(t, NewCmd(), ok, "zone", "update", "z1", "--cache-tag-header", "", "--compression=false")
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := cmdtest.Last(reqs).Obj()
+	if v, present := obj["cache_tag_header"]; !present || v != nil || obj["compression_enabled"] != false {
+		t.Fatalf("got %s", cmdtest.Last(reqs).Raw)
+	}
+}
+
+func TestPurgesListsTagsAndHosts(t *testing.T) {
+	out, _, err := cmdtest.Run(t, NewCmd(), func(m, p string) (int, string) {
+		return 200, `[{"purge_uuid":"p1","scope":"tags","paths":[],"tags":["news"],"status":"completed","requested_at":"now"},
+{"purge_uuid":"p2","scope":"hosts","paths":[],"hosts":["www.example.com"],"status":"completed","requested_at":"now"}]`
+	}, "cache", "purges", "z1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "tags: news") || !strings.Contains(out, "hosts: www.example.com") {
+		t.Fatalf("got %s", out)
 	}
 }
