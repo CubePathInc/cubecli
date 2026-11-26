@@ -22,3 +22,13 @@ func TestVPSPlanRowPrices(t *testing.T) {
 		t.Fatalf("plain: %s %v %s", text, hourly, disc)
 	}
 }
+
+func TestPlanRowPricesWholePercent(t *testing.T) {
+	var p vpsPlanRow
+	if err := json.Unmarshal([]byte(`{"plan_name":"gp.nano","price_per_hour":0.07639,"effective_price_per_hour":0.03819,"discount_percent":50.0}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, disc := p.prices(); disc != "-50%" {
+		t.Fatalf("discount = %q, want -50%%", disc)
+	}
+}

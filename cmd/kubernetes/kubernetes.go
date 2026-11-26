@@ -126,7 +126,7 @@ func plansCmd() *cobra.Command {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("Kubernetes Plans", []string{"ID", "Name", "CPU", "RAM (MB)", "Storage (GB)", "List/h", "Price/h", "Discount"})
+			t := output.NewTable("Kubernetes Plans", []string{"ID", "Name", "Location", "CPU", "RAM (MB)", "Storage (GB)", "List/h", "Price/h", "Discount"})
 			for _, p := range plans {
 				price, discount := p.PricePerHour, ""
 				if p.Effective != nil && p.Discount != nil {
@@ -135,6 +135,7 @@ func plansCmd() *cobra.Command {
 				t.AddRow(
 					strconv.Itoa(p.ID),
 					p.Name,
+					locationCell(p.LocationID),
 					strconv.Itoa(p.CPU),
 					strconv.Itoa(p.RAM),
 					strconv.Itoa(p.Storage),
@@ -149,6 +150,14 @@ func plansCmd() *cobra.Command {
 	}
 	cmd.Flags().String("version", "", "Filter plans by Kubernetes version")
 	return cmd
+}
+
+// locationCell renders a plan's location id, or "-" when the API gives none.
+func locationCell(id *int) string {
+	if id == nil {
+		return "-"
+	}
+	return strconv.Itoa(*id)
 }
 
 // --- list ---

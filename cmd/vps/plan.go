@@ -3,6 +3,7 @@ package vps
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
 	"github.com/CubePathInc/cubecli/internal/output"
@@ -100,7 +101,11 @@ type vpsPlanRow struct {
 func (p vpsPlanRow) prices() (string, float64, string) {
 	price, discount := p.PricePerHour, ""
 	if p.EffectivePricePerHour != nil && p.DiscountPercent != nil {
-		price, discount = *p.EffectivePricePerHour, "-"+p.DiscountPercent.String()+"%"
+		pct := p.DiscountPercent.String()
+		if f, err := p.DiscountPercent.Float64(); err == nil {
+			pct = strconv.FormatFloat(f, 'f', -1, 64)
+		}
+		price, discount = *p.EffectivePricePerHour, "-"+pct+"%"
 	}
 	hourly, _ := price.Float64()
 	return price.String(), hourly, discount
