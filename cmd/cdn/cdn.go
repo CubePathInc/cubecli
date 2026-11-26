@@ -397,6 +397,7 @@ func NewCmd() *cobra.Command {
 	addCacheCmd(cdnCmd)
 	addEventsCmd(cdnCmd)
 	addTokenAuthCmd(cdnCmd)
+	addUnderAttackCmd(cdnCmd)
 
 	return cdnCmd
 }

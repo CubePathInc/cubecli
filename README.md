@@ -332,6 +332,7 @@ a route, BGP peer, load balancer or alert is the uuid too.
 | `cubecli cdn metrics top-urls\|top-countries\|top-asn` | Top analytics |
 | `cubecli cdn metrics waf\|waf-events <uuid>` | What the managed WAF (detection, log only) found |
 | `cubecli cdn events <uuid>` | Blocked, rate limited and challenged requests (30 days) |
+| `cubecli cdn under-attack on\|off\|status <uuid>` | JS challenge for a zone under attack (`on --for 30m --exempt /api/*`, or `--whole-zone`; `--level 2\|3`) |
 | `cubecli cdn plan list` | List available plans |
 | `cubecli cdn cache purge\|purges <uuid>` | Purge the edge cache and follow it |
 | `cubecli cdn token-auth enable\|disable\|rotate-secret\|sign-url` | Signed URLs |
