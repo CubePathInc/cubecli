@@ -112,19 +112,26 @@ func plansCmd() *cobra.Command {
 			}
 
 			var plans []struct {
-				ID           int     `json:"id"`
-				Name         string  `json:"name"`
-				CPU          int     `json:"cpu"`
-				RAM          int     `json:"ram"`
-				Storage      int     `json:"storage"`
-				PricePerHour float64 `json:"price_per_hour"`
+				ID           int      `json:"id"`
+				Name         string   `json:"name"`
+				CPU          int      `json:"cpu"`
+				RAM          int      `json:"ram"`
+				Storage      int      `json:"storage"`
+				LocationID   *int     `json:"location_id"`
+				PricePerHour float64  `json:"price_per_hour"`
+				Effective    *float64 `json:"effective_price_per_hour"`
+				Discount     *float64 `json:"discount_percent"`
 			}
 			if err := json.Unmarshal(resp, &plans); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("Kubernetes Plans", []string{"ID", "Name", "CPU", "RAM (MB)", "Storage (GB)", "Price/h"})
+			t := output.NewTable("Kubernetes Plans", []string{"ID", "Name", "CPU", "RAM (MB)", "Storage (GB)", "List/h", "Price/h", "Discount"})
 			for _, p := range plans {
+				price, discount := p.PricePerHour, ""
+				if p.Effective != nil && p.Discount != nil {
+					price, discount = *p.Effective, "-"+strconv.FormatFloat(*p.Discount, 'f', -1, 64)+"%"
+				}
 				t.AddRow(
 					strconv.Itoa(p.ID),
 					p.Name,
@@ -132,6 +139,8 @@ func plansCmd() *cobra.Command {
 					strconv.Itoa(p.RAM),
 					strconv.Itoa(p.Storage),
 					fmt.Sprintf("$%.4f", p.PricePerHour),
+					fmt.Sprintf("$%.4f", price),
+					discount,
 				)
 			}
 			t.Render()

@@ -35,15 +35,9 @@ func addPlanCmd(parent *cobra.Command) {
 
 			var pricing struct {
 				Locations []struct {
-					Clusters []struct {
-						Plans []struct {
-							Name          string  `json:"plan_name"`
-							CPU           int     `json:"cpu"`
-							RAM           int     `json:"ram"`
-							Storage       int     `json:"storage"`
-							Bandwidth     int     `json:"bandwidth"`
-							PricePerHour  json.Number `json:"price_per_hour"`
-						} `json:"plans"`
+					LocationName string `json:"location_name"`
+					Clusters     []struct {
+						Plans []vpsPlanRow `json:"plans"`
 					} `json:"clusters"`
 				} `json:"locations"`
 			}
@@ -51,25 +45,30 @@ func addPlanCmd(parent *cobra.Command) {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			t := output.NewTable("VPS Plans", []string{"Plan", "vCPUs", "RAM", "Storage", "Bandwidth", "Price/Hour", "Price/Month"})
+			t := output.NewTable("VPS Plans", []string{"Location", "Plan", "vCPUs", "RAM", "Storage", "Bandwidth", "List/Hour", "Price/Hour", "Discount", "Price/Month"})
 
-			seen := make(map[string]bool)
+			// One row per plan and location: the same plan name can have a
+			// different price (or discount) in each location.
 			for _, loc := range pricing.Locations {
+				seen := make(map[string]bool)
 				for _, cluster := range loc.Clusters {
 					for _, plan := range cluster.Plans {
 						if seen[plan.Name] {
 							continue
 						}
 						seen[plan.Name] = true
-						hourly, _ := plan.PricePerHour.Float64()
+						effText, effHourly, discount := plan.prices()
 						t.AddRow(
+							loc.LocationName,
 							plan.Name,
 							fmt.Sprintf("%d", plan.CPU),
 							fmt.Sprintf("%d MB", plan.RAM),
 							fmt.Sprintf("%d GB", plan.Storage),
 							fmt.Sprintf("%d GB", plan.Bandwidth),
 							fmt.Sprintf("$%s", plan.PricePerHour.String()),
-							fmt.Sprintf("$%.2f", hourly*24*30),
+							fmt.Sprintf("$%s", effText),
+							discount,
+							fmt.Sprintf("$%.2f", effHourly*24*30),
 						)
 					}
 				}
@@ -81,4 +80,28 @@ func addPlanCmd(parent *cobra.Command) {
 
 	vpsPlanCmd.AddCommand(vpsPlanListCmd)
 	parent.AddCommand(vpsPlanCmd)
+}
+
+// vpsPlanRow is a plan as returned by /vps/plans. PricePerHour is the list
+// price; the discount fields are null when no discount is active.
+type vpsPlanRow struct {
+	Name                  string       `json:"plan_name"`
+	CPU                   int          `json:"cpu"`
+	RAM                   int          `json:"ram"`
+	Storage               int          `json:"storage"`
+	Bandwidth             int          `json:"bandwidth"`
+	PricePerHour          json.Number  `json:"price_per_hour"`
+	EffectivePricePerHour *json.Number `json:"effective_price_per_hour"`
+	DiscountPercent       *json.Number `json:"discount_percent"`
+}
+
+// prices returns the price charged per hour (as text and number) and the
+// discount column ("-50%", or empty without a discount).
+func (p vpsPlanRow) prices() (string, float64, string) {
+	price, discount := p.PricePerHour, ""
+	if p.EffectivePricePerHour != nil && p.DiscountPercent != nil {
+		price, discount = *p.EffectivePricePerHour, "-"+p.DiscountPercent.String()+"%"
+	}
+	hourly, _ := price.Float64()
+	return price.String(), hourly, discount
 }
