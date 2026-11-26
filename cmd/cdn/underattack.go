@@ -3,7 +3,6 @@ package cdn
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/CubePathInc/cubecli/internal/cmdutil"
@@ -17,11 +16,10 @@ const (
 )
 
 type underAttackState struct {
-	Active      bool     `json:"active"`
-	Until       *string  `json:"until"`
-	Source      *string  `json:"source"`
-	Level       *int     `json:"level"`
-	ExemptPaths []string `json:"exempt_paths"`
+	Active bool    `json:"active"`
+	Until  *string `json:"until"`
+	Source *string `json:"source"`
+	Level  *int    `json:"level"`
 }
 
 func printUnderAttack(resp json.RawMessage) error {
@@ -43,11 +41,11 @@ func printUnderAttack(resp json.RawMessage) error {
 	if s.Level != nil {
 		level = fmt.Sprint(*s.Level)
 	}
-	exempt := "none (whole zone is challenged)"
-	if len(s.ExemptPaths) > 0 {
-		exempt = strings.Join(s.ExemptPaths, ", ")
+	until := "no end (until it is turned off)"
+	if s.Until != nil && *s.Until != "" {
+		until = *s.Until
 	}
-	fmt.Printf("Under attack mode: ON\n  Until:   %s\n  Source:  %s\n  Level:   %s\n  Exempt:  %s\n", str(s.Until), str(s.Source), level, exempt)
+	fmt.Printf("Under attack mode: ON\n  Until:   %s\n  Source:  %s\n  Level:   %s\n", until, str(s.Source), level)
 	return nil
 }
 
@@ -56,58 +54,42 @@ func addUnderAttackCmd(parent *cobra.Command) {
 	uaCmd := &cobra.Command{
 		Use:   "under-attack",
 		Short: "Turn the under attack mode (JS challenge for visitors) of a zone on or off",
-		Long: `The under attack mode makes the edge send visitors a JavaScript challenge until it
-expires or you turn it off. Browsers solve it once; clients that cannot run
-JavaScript (APIs, webhooks, hotlinks, bots) receive an HTML 503 page unless
-their path is exempt. Non-GET requests and websockets are rate limited instead
-of challenged. A visitor whose IPv4 changes has to solve it again.`,
+		Long: `The under attack mode makes the edge send visitors a JavaScript challenge until you
+turn it off, or until the duration you set expires. Browsers solve it once;
+clients that cannot run JavaScript (APIs, webhooks, hotlinks, bots) receive an
+HTML 503 page unless a bypass WAF rule lets them through. Non-GET requests and
+websockets are rate limited instead of challenged. A visitor whose IPv4 changes
+has to solve it again.`,
 	}
 
 	onCmd := &cobra.Command{
 		Use:   "on <zone_uuid>",
-		Short: "Turn the under attack mode on for a duration",
-		Long: `Turn the under attack mode on. The mode turns itself off when --for expires.
+		Short: "Turn the under attack mode on, with an optional end",
+		Long: `Turn the under attack mode on. Without --duration it stays on until you run
+"under-attack off". With --duration (5m to 24h) it turns itself off when it expires.
 
-Choose the paths that must not be challenged with --exempt (repeat the flag).
-Without --exempt the whole zone would be challenged and every API client or
-webhook sender would get a 503, so the command refuses unless you pass --whole-zone.`,
-		Example: `  cubecli cdn under-attack on <zone_uuid> --for 30m --exempt '/api/*' --exempt '/webhook/*'
-  cubecli cdn under-attack on <zone_uuid> --for 2h --level 3 --whole-zone`,
+Requests that must not be challenged (APIs, webhooks, health checks) are
+excepted with a WAF rule of type bypass, not with a flag here:
+  cubecli cdn waf create <zone_uuid> --type bypass ...`,
+		Example: `  cubecli cdn under-attack on <zone_uuid>
+  cubecli cdn under-attack on <zone_uuid> --duration 2h --level 3`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
-			d, _ := cmd.Flags().GetDuration("for")
-			if d < underAttackMinDuration || d > underAttackMaxDuration {
-				return fmt.Errorf("--for must be between 5m and 24h (for example 30m or 2h)")
-			}
-			if d%time.Minute != 0 {
-				return fmt.Errorf("--for must be a whole number of minutes")
-			}
 			level, _ := cmd.Flags().GetInt("level")
 			if level != 2 && level != 3 {
 				return fmt.Errorf("--level must be 2 or 3")
 			}
-			exempt, _ := cmd.Flags().GetStringArray("exempt")
-			whole, _ := cmd.Flags().GetBool("whole-zone")
-			clean := []string{}
-			for _, p := range exempt {
-				p = strings.TrimSpace(p)
-				if p == "" {
-					continue
+			body := map[string]interface{}{"level": level}
+			if cmd.Flags().Changed("duration") {
+				d, _ := cmd.Flags().GetDuration("duration")
+				if d < underAttackMinDuration || d > underAttackMaxDuration {
+					return fmt.Errorf("--duration must be between 5m and 24h (for example 30m or 2h)")
 				}
-				if !strings.HasPrefix(p, "/") {
-					return fmt.Errorf("--exempt %q must start with /", p)
+				if d%time.Minute != 0 {
+					return fmt.Errorf("--duration must be a whole number of minutes")
 				}
-				clean = append(clean, p)
-			}
-			if len(clean) == 0 && !whole {
-				return fmt.Errorf("refusing to challenge the whole zone: APIs, webhooks, hotlinks and bots that cannot run JavaScript would get an HTML 503.\nPass --exempt <path> (repeatable, e.g. --exempt '/api/*' --exempt '/webhook/*') or confirm with --whole-zone")
-			}
-			body := map[string]interface{}{
-				"duration_minutes":   int(d / time.Minute),
-				"level":              level,
-				"exempt_paths":       clean,
-				"confirm_whole_zone": whole && len(clean) == 0,
+				body["duration_minutes"] = int(d / time.Minute)
 			}
 			s := output.NewSpinner("Turning under attack mode on...")
 			s.Start()
@@ -122,11 +104,8 @@ webhook sender would get a 503, so the command refuses unless you pass --whole-z
 			return printUnderAttack(resp)
 		},
 	}
-	onCmd.Flags().Duration("for", 0, "How long the mode stays on, 5m to 24h (required, for example 30m)")
+	onCmd.Flags().Duration("duration", 0, "How long the mode stays on, 5m to 24h (for example 30m). Default: until turned off")
 	onCmd.Flags().Int("level", 2, "Challenge level: 2 or 3")
-	onCmd.Flags().StringArray("exempt", nil, "Path that is not challenged, for example /api/* (repeatable)")
-	onCmd.Flags().Bool("whole-zone", false, "Confirm that the whole zone is challenged, with no exempt paths")
-	_ = onCmd.MarkFlagRequired("for")
 
 	offCmd := &cobra.Command{
 		Use:     "off <zone_uuid>",

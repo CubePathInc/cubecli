@@ -327,12 +327,12 @@ a route, BGP peer, load balancer or alert is the uuid too.
 | `cubecli cdn zone pricing <uuid>` | Zone pricing details |
 | `cubecli cdn origin list\|create\|update\|delete` | Origin management |
 | `cubecli cdn rule list\|show\|create\|update\|delete` | Edge rules |
-| `cubecli cdn waf list\|show\|create\|update\|delete` | WAF rules |
+| `cubecli cdn waf list\|show\|create\|update\|delete` | WAF rules (`--type bypass --action '{"skip":["under_attack"]}' --match ...` skips under attack, managed WAF or rate limit for matching requests) |
 | `cubecli cdn metrics summary\|requests\|bandwidth\|cache` | Analytics |
 | `cubecli cdn metrics top-urls\|top-countries\|top-asn` | Top analytics |
 | `cubecli cdn metrics waf\|waf-events <uuid>` | What the managed WAF (detection, log only) found |
 | `cubecli cdn events <uuid>` | Blocked, rate limited and challenged requests (30 days) |
-| `cubecli cdn under-attack on\|off\|status <uuid>` | JS challenge for a zone under attack (`on --for 30m --exempt /api/*`, or `--whole-zone`; `--level 2\|3`) |
+| `cubecli cdn under-attack on\|off\|status <uuid>` | JS challenge for a zone under attack (`on` stays on until `off`; `--duration 30m` sets an end, `--level 2\|3`; exceptions are `waf create --type bypass` rules) |
 | `cubecli cdn plan list` | List available plans |
 | `cubecli cdn cache purge\|purges <uuid>` | Purge the edge cache and follow it |
 | `cubecli cdn token-auth enable\|disable\|rotate-secret\|sign-url` | Signed URLs |

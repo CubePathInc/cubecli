@@ -119,7 +119,21 @@ func addWAFCmd(parent *cobra.Command) {
 	wafCreateCmd := &cobra.Command{
 		Use:   "create <zone_uuid>",
 		Short: "Create a new WAF rule",
-		Args:  cobra.ExactArgs(1),
+		Long: `Create a WAF rule. Types: firewall_ip, firewall_country, firewall_asn, firewall_ua,
+rate_limit, js_challenge, limit_download_speed, limit_connections,
+limit_bandwidth and bypass.
+
+A bypass rule lets the requests it matches skip protections. Its action lists
+what to skip, any of under_attack, managed_waf and rate_limit:
+  --action '{"skip": ["under_attack"]}'
+It needs --match with conditions that narrow the traffic: not empty, not only a
+host and not the path /*. A zone holds up to 20 enabled bypass rules. Firewall
+rules (IP, country, ASN, user agent) still apply to bypassed requests.`,
+		Example: `  cubecli cdn waf create <zone_uuid> --name "API under attack" --type bypass \
+    --action '{"skip": ["under_attack"]}' --match '{"path_pattern": "/api/*"}'
+  cubecli cdn waf create <zone_uuid> --name "Office" --type bypass \
+    --action '{"skip": ["under_attack", "managed_waf", "rate_limit"]}' --match '{"ip_range": ["203.0.113.0/24"]}'`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := cmdutil.GetClient(cmd)
 			zoneUUID := args[0]
@@ -273,7 +287,7 @@ func addWAFCmd(parent *cobra.Command) {
 
 	// WAF create flags
 	wafCreateCmd.Flags().StringP("name", "n", "", "Name of the WAF rule")
-	wafCreateCmd.Flags().StringP("type", "t", "", "WAF rule type")
+	wafCreateCmd.Flags().StringP("type", "t", "", "WAF rule type (firewall_ip, firewall_country, firewall_asn, firewall_ua, rate_limit, js_challenge, limit_download_speed, limit_connections, limit_bandwidth, bypass)")
 	wafCreateCmd.Flags().IntP("priority", "p", 100, "Rule priority")
 	wafCreateCmd.Flags().StringP("action", "a", "", "Action configuration (JSON string)")
 	wafCreateCmd.Flags().StringP("match", "m", "", "Match conditions (JSON string)")
