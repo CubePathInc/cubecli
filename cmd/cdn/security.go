@@ -17,8 +17,9 @@ var wafCategoryPattern = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
 
 // addManagedWafFlags adds the managed WAF (detection) flags to `cdn zone update`.
 func addManagedWafFlags(cmd *cobra.Command) {
-	cmd.Flags().String("waf-mode", "", "Managed WAF detection mode: off or log (log only, nothing is blocked)")
+	cmd.Flags().String("waf-mode", "", "Managed WAF mode: off, log (log only, nothing is blocked) or block (403 to a request whose anomaly score reaches the threshold)")
 	cmd.Flags().Int("waf-level", 0, "Managed WAF sensitivity level: 1 or 2")
+	cmd.Flags().Int("waf-threshold", 0, "Managed WAF block threshold, 1 to 100 (anomaly score at which mode block answers 403; default 5)")
 	cmd.Flags().StringSlice("waf-exclude-rule-ids", nil, "Rule ids the managed WAF ignores (replaces the list, up to 256; pass an empty value to clear)")
 	cmd.Flags().StringSlice("waf-exclude-categories", nil, "Categories the managed WAF ignores (replaces the list, up to 64; pass an empty value to clear)")
 }
@@ -28,10 +29,17 @@ func managedWafBody(cmd *cobra.Command) (map[string]interface{}, error) {
 	waf := map[string]interface{}{}
 	if cmd.Flags().Changed("waf-mode") {
 		mode, _ := cmd.Flags().GetString("waf-mode")
-		if mode != "off" && mode != "log" {
-			return nil, fmt.Errorf("--waf-mode must be off or log")
+		if mode != "off" && mode != "log" && mode != "block" {
+			return nil, fmt.Errorf("--waf-mode must be off, log or block")
 		}
 		waf["mode"] = mode
+	}
+	if cmd.Flags().Changed("waf-threshold") {
+		threshold, _ := cmd.Flags().GetInt("waf-threshold")
+		if threshold < 1 || threshold > 100 {
+			return nil, fmt.Errorf("--waf-threshold must be between 1 and 100")
+		}
+		waf["threshold"] = threshold
 	}
 	if cmd.Flags().Changed("waf-level") {
 		level, _ := cmd.Flags().GetInt("waf-level")

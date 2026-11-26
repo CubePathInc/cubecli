@@ -323,7 +323,7 @@ a route, BGP peer, load balancer or alert is the uuid too.
 
 | Command | Description |
 |---------|-------------|
-| `cubecli cdn zone list\|show\|create\|update\|delete` | Zone management (`update` takes `--waf-mode`, `--waf-level`, `--waf-exclude-rule-ids`, `--waf-exclude-categories`) |
+| `cubecli cdn zone list\|show\|create\|update\|delete` | Zone management (`update` takes `--waf-mode` (off, log or block), `--waf-threshold`, `--waf-level`, `--waf-exclude-rule-ids`, `--waf-exclude-categories`) |
 | `cubecli cdn zone pricing <uuid>` | Zone pricing details |
 | `cubecli cdn origin list\|create\|update\|delete` | Origin management |
 | `cubecli cdn rule list\|show\|create\|update\|delete` | Edge rules |
